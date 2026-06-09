@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+
+# Poetry
+# Keep pyproject.toml and poetry.lock, ignore the virtualenv
+# poetry.lock is included for reproducible builds
+
+# PlatformIO
+esp32/.pio/
+esp32/.vscode/
+esp32/compile_commands.json
+
+# Output files (regenerated from source)
+output/*.json
+output/*.gcode
+output/*.svg
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Gemini
+.gemini/

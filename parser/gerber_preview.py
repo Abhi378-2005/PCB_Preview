@@ -1,0 +1,309 @@
+#!/usr/bin/env python3
+"""
+gerber_preview.py — Multi-layer Gerber PCB Preview Server (v3)
+
+Uses gerbonara for rendering (replaces pygerber).
+- Accurate copper fill / thermal relief rendering
+- SVG output (vector, scales perfectly, no bitmap artifacts)
+- Unified bounding box via force_bounds (all layers pixel-aligned)
+- No Cairo/cairosvg dependency needed
+
+Usage:
+    cd Test/
+    uvicorn parser.gerber_preview:app --reload --port 5050
+"""
+
+from pathlib import Path
+from typing import List
+
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.templating import Jinja2Templates
+from gerbonara import GerberFile
+
+# ── Paths ──────────────────────────────────────────────────────────
+BASE_DIR     = Path(__file__).resolve().parent.parent   # Test/
+GERBER_DIR   = BASE_DIR / "gerbers"
+TEMPLATE_DIR = BASE_DIR / "templates"
+
+# ── Layer colors (fg = feature color, bg = background) ─────────────
+# All layers use bg='none' (transparent) so they overlay cleanly
+LAYER_COLORS = {
+    "Cu":          {"fg": "#1a1a1a",    "bg": "none"},    # dark traces
+    "Mask":        {"fg": "#2d8c3c88",  "bg": "none"},    # semi-transparent green
+    "Paste":       {"fg": "#99999966",  "bg": "none"},    # semi-transparent grey
+    "Silkscreen":  {"fg": "#e0e0e0",    "bg": "none"},    # white text
+}
+
+# Board background color (shown behind all layers)
+BOARD_BG_COLOR = "#88c563"
+
+
+def detect_layer_type(filename: str) -> str:
+    """Detect the Gerber layer type from the filename."""
+    name = filename.lower()
+    if "cu" in name:
+        return "Cu"
+    elif "mask" in name:
+        return "Mask"
+    elif "paste" in name:
+        return "Paste"
+    elif "silk" in name:
+        return "Silkscreen"
+    return "Unknown"
+
+
+def get_layer_bounds(filepath: str):
+    """Get bounding box using gerbonara. Returns (min_x, min_y, max_x, max_y) or None."""
+    try:
+        gf = GerberFile.open(filepath)
+        bb = gf.bounding_box()
+        if bb is None or bb == (None, None):
+            return None
+        min_x, min_y = float(bb[0][0]), float(bb[0][1])
+        max_x, max_y = float(bb[1][0]), float(bb[1][1])
+        return (min_x, min_y, max_x, max_y)
+    except Exception:
+        return None
+
+
+def compute_union_bounds():
+    """Compute union bounding box across all .gbr layers."""
+    layer_bounds = {}
+    for gbr in sorted(GERBER_DIR.glob("*.gbr")):
+        bounds = get_layer_bounds(str(gbr))
+        if bounds:
+            layer_bounds[gbr.name] = bounds
+
+    if not layer_bounds:
+        return None, {}
+
+    union = (
+        min(b[0] for b in layer_bounds.values()),
+        min(b[1] for b in layer_bounds.values()),
+        max(b[2] for b in layer_bounds.values()),
+        max(b[3] for b in layer_bounds.values()),
+    )
+    return union, layer_bounds
+
+
+# ── App ────────────────────────────────────────────────────────────
+app = FastAPI(
+    title="Antigravity PCB Preview",
+    description="Multi-layer Gerber preview (gerbonara SVG rendering)",
+    version="0.4.0",
+)
+
+templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+
+# ── Caches ─────────────────────────────────────────────────────────
+_render_cache: dict[str, str] = {}    # filename -> SVG string
+_union_bounds = None
+_layer_bounds: dict[str, tuple] = {}
+_board_dims = None
+
+
+def _reset_caches():
+    """Clear all caches — call after uploading/deleting files."""
+    global _union_bounds, _layer_bounds, _board_dims, _render_cache
+    _render_cache = {}
+    _union_bounds = None
+    _layer_bounds = {}
+    _board_dims = None
+
+
+def _ensure_bounds():
+    """Lazily compute union bounds on first request."""
+    global _union_bounds, _layer_bounds, _board_dims
+    if _union_bounds is None:
+        _union_bounds, _layer_bounds = compute_union_bounds()
+        if _union_bounds:
+            w = _union_bounds[2] - _union_bounds[0]
+            h = _union_bounds[3] - _union_bounds[1]
+            _board_dims = {
+                "width_mm": round(w, 2),
+                "height_mm": round(h, 2),
+                "min_x": round(_union_bounds[0], 4),
+                "min_y": round(_union_bounds[1], 4),
+                "max_x": round(_union_bounds[2], 4),
+                "max_y": round(_union_bounds[3], 4),
+            }
+
+
+# ── Routes ─────────────────────────────────────────────────────────
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    """Main preview page."""
+    if not GERBER_DIR.exists():
+        raise HTTPException(status_code=404, detail="gerbers/ folder not found")
+
+    _ensure_bounds()
+
+    files = sorted([f.name for f in GERBER_DIR.iterdir() if f.suffix == ".gbr"])
+    renderable = [f for f in files if f in _layer_bounds]
+
+    return templates.TemplateResponse(
+        request,
+        "preview.html",
+        {"files": renderable, "board": _board_dims or {}, "board_bg": BOARD_BG_COLOR},
+    )
+
+
+@app.get("/render/{filename}")
+async def render_layer(filename: str):
+    """
+    Render a .gbr file to SVG using gerbonara.
+    All layers share the same viewBox via force_bounds.
+    Returns image/svg+xml.
+    """
+    if "/" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    filepath = GERBER_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail=f"{filename} not found")
+    if filepath.suffix != ".gbr":
+        raise HTTPException(status_code=400, detail="Only .gbr files")
+
+    # Check cache
+    if filename in _render_cache:
+        return Response(content=_render_cache[filename], media_type="image/svg+xml")
+
+    _ensure_bounds()
+
+    if filename not in _layer_bounds:
+        raise HTTPException(status_code=400, detail=f"{filename} has no geometry")
+
+    try:
+        # Detect layer type for color
+        layer_type = detect_layer_type(filename)
+        colors = LAYER_COLORS.get(layer_type, LAYER_COLORS["Cu"])
+
+        # Render with gerbonara, using union bounds for alignment
+        gf = GerberFile.open(str(filepath))
+        force = (
+            (_union_bounds[0], _union_bounds[1]),
+            (_union_bounds[2], _union_bounds[3]),
+        )
+        svg = gf.to_svg(
+            fg=colors["fg"],
+            bg=colors["bg"],
+            force_bounds=force,
+        )
+        svg_str = str(svg)
+
+        # Cache
+        _render_cache[filename] = svg_str
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Render failed: {str(e)}")
+
+    return Response(content=svg_str, media_type="image/svg+xml")
+
+
+@app.get("/layers")
+async def list_layers():
+    """JSON list of available layers."""
+    _ensure_bounds()
+
+    if not GERBER_DIR.exists():
+        raise HTTPException(status_code=404, detail="gerbers/ folder not found")
+
+    files = sorted([f.name for f in GERBER_DIR.iterdir() if f.suffix == ".gbr"])
+    layers = []
+    for f in files:
+        lt = detect_layer_type(f)
+        has_geometry = f in _layer_bounds
+        layers.append({"filename": f, "type": lt, "has_geometry": has_geometry})
+
+    return {"layers": layers, "count": len(layers), "board": _board_dims}
+
+
+@app.get("/board-info")
+async def board_info():
+    """Returns PCB board dimensions."""
+    _ensure_bounds()
+    if not _board_dims:
+        raise HTTPException(status_code=404, detail="No board data")
+    return _board_dims
+
+
+@app.post("/upload")
+async def upload_gerbers(files: List[UploadFile] = File(...)):
+    """
+    Upload one or more .gbr files.
+    Saves to gerbers/ directory and resets all caches.
+    """
+    GERBER_DIR.mkdir(parents=True, exist_ok=True)
+
+    uploaded = []
+    rejected = []
+
+    for file in files:
+        # Only accept .gbr files
+        if not file.filename or not file.filename.lower().endswith(".gbr"):
+            rejected.append(file.filename or "unknown")
+            continue
+
+        # Security: strip path components, keep only the filename
+        safe_name = Path(file.filename).name
+        if not safe_name or safe_name.startswith("."):
+            rejected.append(file.filename)
+            continue
+
+        # Read content and save
+        content = await file.read()
+        dest = GERBER_DIR / safe_name
+        dest.write_bytes(content)
+        uploaded.append(safe_name)
+
+    # Reset caches so next request recomputes bounds + renders
+    _reset_caches()
+
+    return JSONResponse(content={
+        "uploaded": uploaded,
+        "rejected": rejected,
+        "total": len(uploaded),
+    })
+
+
+@app.delete("/clear")
+async def clear_gerbers():
+    """
+    Delete all .gbr files from gerbers/ directory.
+    Resets all caches.
+    """
+    removed = []
+    if GERBER_DIR.exists():
+        for gbr in GERBER_DIR.glob("*.gbr"):
+            gbr.unlink()
+            removed.append(gbr.name)
+
+    _reset_caches()
+
+    return JSONResponse(content={
+        "removed": removed,
+        "total": len(removed),
+    })
+
+
+def main():
+    """Entry point — starts the server and opens the browser."""
+    import threading
+    import webbrowser
+    import uvicorn
+
+    def open_browser():
+        webbrowser.open("http://localhost:5050")
+
+    threading.Timer(1.5, open_browser).start()
+    uvicorn.run(
+        "parser.gerber_preview:app",
+        host="127.0.0.1",
+        port=5050,
+    )
+
+
+if __name__ == "__main__":
+    main()

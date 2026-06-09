@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PCB Layer Preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #0d0f14;
+      --surface: #161a22;
+      --border: #2a2f3d;
+      --accent: #00d4ff;
+      --green: #00ff88;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --dim-color: #ff6b35;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), #0088ff);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+    }
+
+    header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+    }
+
+    header .subtitle {
+      font-size: 12px;
+      color: var(--muted);
+      margin-left: 8px;
+      font-weight: 400;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-left: auto;
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: 0.4
+      }
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 20px;
+      align-items: start;
+      max-width: 1400px;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .sidebar h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .layer-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-bottom: 4px;
+      user-select: none;
+      border: 1px solid transparent;
+    }
+
+    .layer-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border);
+    }
+
+    .layer-item.active {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .layer-toggle {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 2px solid currentColor;
+      flex-shrink: 0;
+      position: relative;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .layer-item:active .layer-toggle {
+      transform: scale(0.85);
+    }
+
+    .layer-item.active .layer-toggle {
+      background: currentColor;
+    }
+
+    .layer-item.active .layer-toggle::after {
+      content: '✓';
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--bg);
+      font-weight: 700;
+    }
+
+    .layer-name {
+      font-size: 11px;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    .layer-badge {
+      font-size: 9px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      border: 1px solid currentColor;
+      opacity: 0.7;
+    }
+
+    [data-layer-type="Cu"] {
+      color: #ef4444;
+    }
+
+    [data-layer-type="Mask"] {
+      color: #a855f7;
+    }
+
+    [data-layer-type="Paste"] {
+      color: #3b82f6;
+    }
+
+    [data-layer-type="Silkscreen"] {
+      color: #fbbf24;
+    }
+
+    [data-layer-type="Unknown"] {
+      color: var(--muted);
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 16px 0;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+
+    .btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(0, 212, 255, 0.05);
+    }
+
+    /* ── Preview Panel ── */
+    .preview-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .preview-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .preview-toolbar .label {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .zoom-controls {
+      display: flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+
+    .zoom-btn {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .zoom-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .preview-viewport {
+      position: relative;
+      width: 100%;
+      min-height: 500px;
+      aspect-ratio: 16/10;
+      background: radial-gradient(circle at 50% 50%, #1a2035 0%, #0d0f14 100%);
+      overflow: hidden;
+      cursor: grab;
+    }
+
+    .preview-viewport:active {
+      cursor: grabbing;
+    }
+
+    .preview-viewport::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .layer-stack {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+      transform-origin: center;
+      transition: transform 0.15s ease;
+    }
+
+    .layer-img {
+      position: absolute;
+      max-width: 85%;
+      max-height: 85%;
+      object-fit: contain;
+      transition: opacity 0.25s ease;
+    }
+
+    .layer-img.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* ── Dimension Annotations ── */
+    .dim-container {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .dim-wrapper {
+      position: relative;
+      /* Match the layer-img sizing */
+      max-width: 85%;
+      max-height: 85%;
+      width: 100%;
+      height: 100%;
+    }
+
+    .dim-label {
+      position: absolute;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--dim-color);
+      background: rgba(13, 15, 20, 0.85);
+      padding: 3px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      border: 1px solid var(--dim-color);
+      letter-spacing: 0.03em;
+    }
+
+    /* Width label — bottom center */
+    .dim-width {
+      bottom: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    /* Height label — right center */
+    .dim-height {
+      right: -90px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    /* Dimension lines */
+    .dim-line-h,
+    .dim-line-v {
+      position: absolute;
+      background: var(--dim-color);
+      opacity: 0.5;
+    }
+
+    /* Horizontal line under the board */
+    .dim-line-h {
+      bottom: -12px;
+      left: 0;
+      right: 0;
+      height: 1px;
+    }
+
+    .dim-line-h::before,
+    .dim-line-h::after {
+      content: '';
+      position: absolute;
+      top: -4px;
+      width: 1px;
+      height: 9px;
+      background: var(--dim-color);
+    }
+
+    .dim-line-h::before {
+      left: 0;
+    }
+
+    .dim-line-h::after {
+      right: 0;
+    }
+
+    /* Vertical line to the right */
+    .dim-line-v {
+      right: -12px;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+    }
+
+    .dim-line-v::before,
+    .dim-line-v::after {
+      content: '';
+      position: absolute;
+      left: -4px;
+      width: 9px;
+      height: 1px;
+      background: var(--dim-color);
+    }
+
+    .dim-line-v::before {
+      top: 0;
+    }
+
+    .dim-line-v::after {
+      bottom: 0;
+    }
+
+    /* Loading */
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(13, 15, 20, 0.9);
+      z-index: 10;
+      gap: 14px;
+    }
+
+    .loading-overlay.done {
+      display: none;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .loading-text {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .loading-progress {
+      font-size: 11px;
+      color: var(--accent);
+    }
+
+    .empty-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      opacity: 0.5;
+    }
+
+    .info-bar {
+      display: flex;
+      gap: 20px;
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    .info-bar span {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .info-bar strong {
+      color: var(--text);
+    }
+
+    /* ── Upload Zone ── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 16px;
+    }
+
+    .upload-zone:hover,
+    .upload-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(0, 212, 255, 0.05);
+    }
+
+    .upload-zone .upload-icon {
+      font-size: 24px;
+      margin-bottom: 6px;
+    }
+
+    .upload-zone .upload-text {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .upload-zone .upload-text strong {
+      color: var(--accent);
+    }
+
+    .upload-zone input[type="file"] {
+      display: none;
+    }
+
+    .upload-progress {
+      display: none;
+      margin-top: 10px;
+    }
+
+    .upload-progress.active {
+      display: block;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    .upload-status {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .upload-status.success {
+      color: var(--green);
+    }
+
+    .upload-status.error {
+      color: #ff4444;
+    }
+
+    .btn-danger {
+      border-color: #ff4444;
+      color: #ff4444;
+    }
+
+    .btn-danger:hover {
+      border-color: #ff4444;
+      color: #ff4444;
+      background: rgba(255, 68, 68, 0.1);
+    }
+
+    @media (max-width: 768px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        order: 2;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <div class="logo">⚡</div>
+    <h1>ANTIGRAVITY <span class="subtitle">PCB Layer Preview</span></h1>
+    <div class="status-dot"></div>
+  </header>
+
+  <div class="workspace">
+
+    <aside class="sidebar">
+
+      <!-- Upload Zone -->
+      <h2>Upload Gerber Files</h2>
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+        <div class="upload-icon">📂</div>
+        <div class="upload-text">
+          <strong>Drop .gbr files here</strong><br>
+          or click to browse
+        </div>
+        <input type="file" id="file-input" multiple accept=".gbr" onchange="handleFileSelect(event)">
+      </div>
+      <div class="upload-progress" id="upload-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="upload-status" id="upload-status">Uploading...</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Layer List -->
+      <h2>Layers</h2>
+
+      {% if files %}
+      {% for file in files %}
+      {% set layer_type = "Cu" if "Cu" in file
+      else "Mask" if "Mask" in file
+      else "Paste" if "Paste" in file
+      else "Silkscreen" if "Silk" in file
+      else "Unknown" %}
+      <div class="layer-item active" data-file="{{ file }}" data-layer-type="{{ layer_type }}"
+        onclick="toggleLayer(this)">
+        <div class="layer-toggle" data-layer-type="{{ layer_type }}"></div>
+        <span class="layer-name">{{ file }}</span>
+        <span class="layer-badge" data-layer-type="{{ layer_type }}">{{ layer_type }}</span>
+      </div>
+      {% endfor %}
+
+      <div class="divider"></div>
+      <div class="btn-group">
+        <button class="btn" onclick="showAll()">Show All</button>
+        <button class="btn" onclick="hideAll()">Hide All</button>
+      </div>
+      <div class="btn-group" style="margin-top: 8px;">
+        <button class="btn btn-danger" onclick="clearAll()">Clear All Files</button>
+      </div>
+
+      <div class="divider"></div>
+      <h2>Board Info</h2>
+      <div style="font-size: 11px; color: var(--muted); line-height: 2.0;">
+        {% if board %}
+        Width: <strong style="color: var(--dim-color)">{{ board.width_mm }} mm</strong><br>
+        Height: <strong style="color: var(--dim-color)">{{ board.height_mm }} mm</strong><br>
+        {% endif %}
+        Layers: <strong style="color: var(--text)">{{ files|length }}</strong><br>
+        Format: <strong style="color: var(--text)">Gerber RS-274X</strong>
+      </div>
+      {% else %}
+      <p style="font-size:12px; color: var(--muted)">No .gbr files found.<br>Upload some above.</p>
+      {% endif %}
+    </aside>
+
+    <main class="preview-panel">
+
+      <div class="preview-toolbar">
+        <span class="label">Board Preview</span>
+        <span id="active-count">{{ files|length }}/{{ files|length }} visible</span>
+        <div class="zoom-controls">
+          <button class="zoom-btn" onclick="zoom(-0.2)" title="Zoom out">−</button>
+          <button class="zoom-btn" onclick="resetZoom()" title="Reset">⊙</button>
+          <button class="zoom-btn" onclick="zoom(0.2)" title="Zoom in">+</button>
+        </div>
+      </div>
+
+      <div class="preview-viewport" id="viewport">
+
+        <div class="loading-overlay" id="loading">
+          <div class="spinner"></div>
+          <span class="loading-text">Rendering layers...</span>
+          <span class="loading-progress" id="load-progress">0 / {{ files|length }}</span>
+        </div>
+
+        <div class="layer-stack" id="layer-stack">
+          {% if files %}
+          <!-- Board background -->
+          <div style="position:absolute; max-width:85%; max-height:85%;
+                      width:100%; aspect-ratio: {{ board.width_mm }} / {{ board.height_mm }};
+                      background: {{ board_bg }}; border-radius: 3px;"></div>
+
+          {% for file in files %}
+          <img class="layer-img" data-file="{{ file }}" src="/render/{{ file }}" alt="{{ file }}" onload="onLayerLoad()"
+            onerror="onLayerError(this)">
+          {% endfor %}
+
+          <!-- Dimension annotations overlaid on the board -->
+          {% if board %}
+          <div class="dim-container" id="dim-container">
+            <div class="dim-wrapper" id="dim-wrapper">
+              <div class="dim-line-h"></div>
+              <div class="dim-label dim-width">↔ {{ board.width_mm }} mm</div>
+              <div class="dim-line-v"></div>
+              <div class="dim-label dim-height">↕ {{ board.height_mm }} mm</div>
+            </div>
+          </div>
+          {% endif %}
+          {% else %}
+          <div class="empty-state">
+            <div class="icon">📋</div>
+            <span>No Gerber files found</span>
+          </div>
+          {% endif %}
+        </div>
+
+      </div>
+
+      <div class="info-bar">
+        <span id="zoom-display">Zoom: <strong>100%</strong></span>
+        <span>Renderer: <strong>gerbonara SVG</strong></span>
+        {% if board %}
+        <span>Board: <strong>{{ board.width_mm }} × {{ board.height_mm }} mm</strong></span>
+        {% endif %}
+        <span>Alignment: <strong>force_bounds</strong></span>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    let currentZoom = 1.0;
+    let loadedCount = 0;
+    const totalLayers = {{ files| length }};
+
+    function toggleLayer(item) {
+      const file = item.dataset.file;
+      const isActive = item.classList.contains('active');
+      item.classList.toggle('active');
+      document.querySelectorAll('.layer-img').forEach(img => {
+        if (img.dataset.file === file) img.classList.toggle('hidden', isActive);
+      });
+      updateActiveCount();
+    }
+
+    function showAll() {
+      document.querySelectorAll('.layer-item').forEach(i => i.classList.add('active'));
+      document.querySelectorAll('.layer-img').forEach(i => i.classList.remove('hidden'));
+      updateActiveCount();
+    }
+
+    function hideAll() {
+      document.querySelectorAll('.layer-item').forEach(i => i.classList.remove('active'));
+      document.querySelectorAll('.layer-img').forEach(i => i.classList.add('hidden'));
+      updateActiveCount();
+    }
+
+    function updateActiveCount() {
+      const active = document.querySelectorAll('.layer-item.active').length;
+      document.getElementById('active-count').textContent = `${active}/${totalLayers} visible`;
+    }
+
+    function zoom(delta) {
+      currentZoom = Math.min(5, Math.max(0.2, currentZoom + delta));
+      applyZoom();
+    }
+
+    function resetZoom() { currentZoom = 1.0; applyZoom(); }
+
+    function applyZoom() {
+      document.getElementById('layer-stack').style.transform = `scale(${currentZoom})`;
+      document.getElementById('zoom-display').innerHTML =
+        `Zoom: <strong>${Math.round(currentZoom * 100)}%</strong>`;
+    }
+
+    document.getElementById('viewport').addEventListener('wheel', (e) => {
+      e.preventDefault();
+      zoom(e.deltaY < 0 ? 0.15 : -0.15);
+    }, { passive: false });
+
+    function onLayerLoad() {
+      loadedCount++;
+      document.getElementById('load-progress').textContent = `${loadedCount} / ${totalLayers}`;
+      if (loadedCount >= totalLayers) {
+        document.getElementById('loading').classList.add('done');
+        // Size the dimension wrapper to match the first loaded image
+        sizeDimensions();
+      }
+    }
+
+    function onLayerError(img) {
+      loadedCount++;
+      img.style.opacity = '0.15';
+      img.style.filter = 'grayscale(1)';
+      document.getElementById('load-progress').textContent = `${loadedCount} / ${totalLayers}`;
+      if (loadedCount >= totalLayers) {
+        document.getElementById('loading').classList.add('done');
+        sizeDimensions();
+      }
+    }
+
+    function sizeDimensions() {
+      // Match dim-wrapper size to the first rendered layer image
+      const firstImg = document.querySelector('.layer-img:not(.hidden)');
+      const wrapper = document.getElementById('dim-wrapper');
+      if (!firstImg || !wrapper) return;
+
+      // Use the natural aspect ratio and the displayed size
+      const rect = firstImg.getBoundingClientRect();
+      wrapper.style.width = rect.width + 'px';
+      wrapper.style.height = rect.height + 'px';
+    }
+
+    window.addEventListener('resize', sizeDimensions);
+
+    if (totalLayers === 0) {
+      document.getElementById('loading').classList.add('done');
+    }
+
+    // ── Upload Functions ────────────────────────────────
+
+    const uploadZone = document.getElementById('upload-zone');
+    const fileInput = document.getElementById('file-input');
+    const progressEl = document.getElementById('upload-progress');
+    const progressFill = document.getElementById('progress-fill');
+    const statusEl = document.getElementById('upload-status');
+
+    // Drag & Drop
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('dragover');
+    });
+
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) uploadFiles(files);
+    });
+
+    function handleFileSelect(event) {
+      const files = event.target.files;
+      if (files.length > 0) uploadFiles(files);
+    }
+
+    async function uploadFiles(files) {
+      // Show progress
+      progressEl.classList.add('active');
+      progressFill.style.width = '10%';
+      statusEl.textContent = `Uploading ${files.length} file(s)...`;
+      statusEl.className = 'upload-status';
+
+      const formData = new FormData();
+      let gbrCount = 0;
+      for (const file of files) {
+        if (file.name.toLowerCase().endsWith('.gbr')) {
+          formData.append('files', file);
+          gbrCount++;
+        }
+      }
+
+      if (gbrCount === 0) {
+        statusEl.textContent = 'No .gbr files found in selection';
+        statusEl.className = 'upload-status error';
+        progressFill.style.width = '100%';
+        progressFill.style.background = '#ff4444';
+        return;
+      }
+
+      progressFill.style.width = '40%';
+
+      try {
+        const response = await fetch('/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        progressFill.style.width = '80%';
+
+        if (!response.ok) {
+          throw new Error(`Upload failed: ${response.status}`);
+        }
+
+        const result = await response.json();
+        progressFill.style.width = '100%';
+
+        if (result.total > 0) {
+          statusEl.textContent = `✓ Uploaded ${result.total} file(s). Reloading...`;
+          statusEl.className = 'upload-status success';
+          // Reload page to show new layers
+          setTimeout(() => window.location.reload(), 800);
+        } else {
+          statusEl.textContent = 'No valid .gbr files uploaded';
+          statusEl.className = 'upload-status error';
+        }
+
+      } catch (err) {
+        progressFill.style.width = '100%';
+        progressFill.style.background = '#ff4444';
+        statusEl.textContent = `Error: ${err.message}`;
+        statusEl.className = 'upload-status error';
+      }
+    }
+
+    async function clearAll() {
+      if (!confirm('Remove all .gbr files and clear the preview?')) return;
+
+      try {
+        const response = await fetch('/clear', { method: 'DELETE' });
+        if (response.ok) {
+          window.location.reload();
+        }
+      } catch (err) {
+        alert('Failed to clear files: ' + err.message);
+      }
+    }
+  </script>
+
+</body>
+
+</html>
