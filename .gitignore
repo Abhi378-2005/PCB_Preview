@@ -35,3 +35,8 @@ Thumbs.db
 
 # Gemini
 .gemini/
+
+# Electron & Node
+node_modules/
+release/
+package-lock.json

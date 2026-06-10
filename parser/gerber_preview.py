@@ -21,10 +21,20 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from gerbonara import GerberFile
 
+import sys
+import tempfile
+
 # ── Paths ──────────────────────────────────────────────────────────
-BASE_DIR     = Path(__file__).resolve().parent.parent   # Test/
-GERBER_DIR   = BASE_DIR / "gerbers"
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    # Running as PyInstaller bundle
+    BASE_DIR = Path(sys._MEIPASS)
+    GERBER_DIR = Path(tempfile.gettempdir()) / "antigravity_pcb_gerbers"
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    GERBER_DIR = BASE_DIR / "gerbers"
+
 TEMPLATE_DIR = BASE_DIR / "templates"
+GERBER_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Layer colors (fg = feature color, bg = background) ─────────────
 # All layers use bg='none' (transparent) so they overlay cleanly
@@ -289,19 +299,26 @@ async def clear_gerbers():
 
 
 def main():
-    """Entry point — starts the server and opens the browser."""
+    """Entry point — starts the server."""
     import threading
     import webbrowser
     import uvicorn
+    import argparse
 
-    def open_browser():
-        webbrowser.open("http://localhost:5050")
+    parser = argparse.ArgumentParser(description="PCB Preview Server")
+    parser.add_argument("--port", type=int, default=5050, help="Port to run the server on")
+    parser.add_argument("--no-browser", action="store_true", help="Do not open browser automatically")
+    args = parser.parse_args()
 
-    threading.Timer(1.5, open_browser).start()
+    if not args.no_browser:
+        def open_browser():
+            webbrowser.open(f"http://localhost:{args.port}")
+        threading.Timer(1.5, open_browser).start()
+
     uvicorn.run(
-        "parser.gerber_preview:app",
+        app,
         host="127.0.0.1",
-        port=5050,
+        port=args.port,
     )
 
 

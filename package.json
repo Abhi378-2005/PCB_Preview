@@ -1,0 +1,42 @@
+{
+  "name": "pcb-preview",
+  "version": "0.4.0",
+  "description": "Multi-layer Gerber PCB preview and plotter toolchain",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "author": "Shivam Bajaj",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.antigravity.pcbpreview",
+    "productName": "Antigravity PCB Preview",
+    "directories": {
+      "output": "release"
+    },
+    "extraResources": [
+      {
+        "from": "dist/pcb-preview-server",
+        "to": "pcb-preview-server",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

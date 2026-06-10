@@ -1,0 +1,1 @@
+poetry run pyinstaller --name pcb-preview-server --add-data "templates;templates" --hidden-import uvicorn.logging --hidden-import uvicorn.protocols.http.h11_impl --hidden-import uvicorn.protocols.websockets.websockets_impl --hidden-import uvicorn.loops.asyncio --hidden-import jinja2.ext --collect-all gerbonara --noconfirm parser/gerber_preview.py
