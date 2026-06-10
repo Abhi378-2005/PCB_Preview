@@ -39,4 +39,3 @@ Thumbs.db
 # Electron & Node
 node_modules/
 release/
-package-lock.json
