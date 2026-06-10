@@ -300,7 +300,7 @@
       cursor: grab;
     }
 
-    .preview-viewport:active {
+    .preview-viewport.panning {
       cursor: grabbing;
     }
 
@@ -323,8 +323,7 @@
       align-items: center;
       justify-content: center;
       z-index: 1;
-      transform-origin: center;
-      transition: transform 0.15s ease;
+      transform-origin: 0 0;
     }
 
     .layer-img {
@@ -612,6 +611,320 @@
       background: rgba(255, 68, 68, 0.1);
     }
 
+    /* ── G-code Section ── */
+    .gcode-section {
+      margin-top: 4px;
+    }
+
+    .copper-status {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      line-height: 1.6;
+    }
+
+    .copper-status .detected {
+      color: var(--green);
+    }
+
+    .copper-status .not-found {
+      color: #ff4444;
+    }
+
+    .btn-generate {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      background: rgba(0, 212, 255, 0.06);
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-generate:hover {
+      background: rgba(0, 212, 255, 0.15);
+    }
+
+    .btn-generate:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-generate.converting {
+      border-color: var(--muted);
+      color: var(--muted);
+    }
+
+    .btn-download {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--green);
+      color: var(--green);
+      background: rgba(50, 205, 50, 0.06);
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 8px;
+      display: none;
+      text-decoration: none;
+      text-align: center;
+    }
+
+    .btn-download:hover {
+      background: rgba(50, 205, 50, 0.15);
+    }
+
+    .btn-download.visible {
+      display: block;
+    }
+
+    .gcode-stats {
+      display: none;
+      margin-top: 10px;
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 2.0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .gcode-stats.visible {
+      display: block;
+    }
+
+    .gcode-stats strong {
+      color: var(--text);
+    }
+
+    .gcode-stats .stat-label {
+      color: var(--muted);
+    }
+
+    /* ── Head Pointer Overlay ── */
+    .pointer-overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    .head-pointer {
+      position: absolute;
+      width: 16px; height: 16px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 21;
+    }
+
+    .head-pointer::before,
+    .head-pointer::after {
+      content: '';
+      position: absolute;
+      background: #ff2222;
+    }
+
+    .head-pointer::before {
+      width: 1px; height: 100%;
+      left: 50%; top: 0;
+      transform: translateX(-50%);
+    }
+
+    .head-pointer::after {
+      width: 100%; height: 1px;
+      top: 50%; left: 0;
+      transform: translateY(-50%);
+    }
+
+    .head-pointer .dot {
+      position: absolute;
+      width: 3px; height: 3px;
+      background: #ff2222;
+      border-radius: 50%;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 4px #ff2222;
+    }
+
+    .head-pointer.drawing .dot {
+      background: var(--green);
+      box-shadow: 0 0 4px var(--green);
+    }
+
+    .head-pointer.drawing::before,
+    .head-pointer.drawing::after {
+      background: var(--green);
+    }
+
+    /* Trail canvas for draw path */
+    .trail-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 19;
+    }
+
+    /* ── Control Panel ── */
+    .control-panel {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 16px;
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-top: 12px;
+    }
+
+    .control-panel.hidden { display: none; }
+
+    /* Position readout */
+    .position-readout {
+      display: flex;
+      gap: 16px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .position-readout .coord {
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .position-readout .mode-badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .mode-badge.jog {
+      background: rgba(0, 212, 255, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+
+    .mode-badge.run {
+      background: rgba(0, 255, 136, 0.12);
+      color: var(--green);
+      border: 1px solid rgba(0, 255, 136, 0.3);
+    }
+
+    /* D-pad */
+    .dpad-controls {
+      display: grid;
+      grid-template-columns: repeat(3, 32px);
+      grid-template-rows: repeat(3, 32px);
+      gap: 3px;
+      justify-self: center;
+    }
+
+    .dpad-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.1s;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .dpad-btn:hover { background: rgba(255,255,255,0.08); }
+    .dpad-btn:active { transform: scale(0.9); background: rgba(0, 212, 255, 0.15); }
+    .dpad-btn.center { font-size: 9px; color: var(--muted); }
+
+    .step-select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 3px 6px;
+      border-radius: 4px;
+      width: 100%;
+      grid-column: 1 / -1;
+      text-align: center;
+    }
+
+    /* Run controls */
+    .run-controls {
+      display: flex;
+      gap: 6px;
+      justify-self: end;
+    }
+
+    .run-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px; height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .run-btn:hover { background: rgba(255,255,255,0.08); }
+
+    .run-btn.play { border-color: var(--green); color: var(--green); }
+    .run-btn.play:hover { background: rgba(0,255,136,0.12); }
+    .run-btn.pause { border-color: #ffaa00; color: #ffaa00; }
+    .run-btn.stop { border-color: #ff4444; color: #ff4444; }
+    .run-btn.stop:hover { background: rgba(255,68,68,0.12); }
+
+    .run-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* Progress bar for run mode */
+    .run-progress {
+      grid-column: 1 / -1;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      display: none;
+    }
+
+    .run-progress.visible { display: block; }
+
+    .run-progress-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .run-status {
+      grid-column: 1 / -1;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: center;
+      display: none;
+    }
+
+    .run-status.visible { display: block; }
+
     @media (max-width: 768px) {
       .workspace {
         grid-template-columns: 1fr;
@@ -692,6 +1005,34 @@
         Layers: <strong style="color: var(--text)">{{ files|length }}</strong><br>
         Format: <strong style="color: var(--text)">Gerber RS-274X</strong>
       </div>
+
+      <div class="divider"></div>
+
+      <!-- G-code Conversion -->
+      <h2>G-code Conversion</h2>
+      <div class="gcode-section">
+        <div class="copper-status">
+          Copper layer:
+          {% if copper_file %}
+          <span class="detected">✓ {{ copper_file }}</span>
+          {% else %}
+          <span class="not-found">✗ Not found</span>
+          {% endif %}
+        </div>
+
+        <button class="btn-generate" id="btn-generate"
+          onclick="convertGCode()"
+          {% if not copper_file %}disabled title="Upload a copper layer first"{% endif %}>
+          ⚙ Generate G-code
+        </button>
+
+        <a class="btn-download" id="btn-download" href="/download-gcode">
+          ⬇ Download output.gcode
+        </a>
+
+        <div class="gcode-stats" id="gcode-stats"></div>
+      </div>
+
       {% else %}
       <p style="font-size:12px; color: var(--muted)">No .gbr files found.<br>Upload some above.</p>
       {% endif %}
@@ -703,9 +1044,9 @@
         <span class="label">Board Preview</span>
         <span id="active-count">{{ files|length }}/{{ files|length }} visible</span>
         <div class="zoom-controls">
-          <button class="zoom-btn" onclick="zoom(-0.2)" title="Zoom out">−</button>
+          <button class="zoom-btn" onclick="zoomAtCenter(-0.2)" title="Zoom out">−</button>
           <button class="zoom-btn" onclick="resetZoom()" title="Reset">⊙</button>
-          <button class="zoom-btn" onclick="zoom(0.2)" title="Zoom in">+</button>
+          <button class="zoom-btn" onclick="zoomAtCenter(0.2)" title="Zoom in">+</button>
         </div>
       </div>
 
@@ -746,9 +1087,63 @@
             <span>No Gerber files found</span>
           </div>
           {% endif %}
+
+          <!-- Head pointer overlay -->
+          <canvas class="trail-canvas" id="trail-canvas"></canvas>
+          <div class="head-pointer" id="head-pointer" style="left: 5%; top: 90%;">
+            <div class="dot"></div>
+          </div>
+
         </div>
 
       </div>
+
+      <!-- ── Control Panel: D-pad + position + Run ── -->
+      {% if files %}
+      <div class="control-panel" id="control-panel">
+
+        <!-- Position readout -->
+        <div class="position-readout">
+          <span class="mode-badge jog" id="mode-badge">JOG</span>
+          <span>X: <span class="coord" id="pos-x">0.00</span> mm</span>
+          <span>Y: <span class="coord" id="pos-y">0.00</span> mm</span>
+        </div>
+
+        <!-- D-pad -->
+        <div class="dpad-controls">
+          <div></div>
+          <button class="dpad-btn" onclick="jogHead(0, 1)" title="Y+">▲</button>
+          <div></div>
+          <button class="dpad-btn" onclick="jogHead(-1, 0)" title="X-">◀</button>
+          <button class="dpad-btn center" onclick="homeHead()" title="Home">⌂</button>
+          <button class="dpad-btn" onclick="jogHead(1, 0)" title="X+">▶</button>
+          <div></div>
+          <button class="dpad-btn" onclick="jogHead(0, -1)" title="Y-">▼</button>
+          <div></div>
+          <select class="step-select" id="jog-step" title="Step size">
+            <option value="0.1">0.1 mm</option>
+            <option value="0.5">0.5 mm</option>
+            <option value="1" selected>1.0 mm</option>
+            <option value="2">2.0 mm</option>
+            <option value="5">5.0 mm</option>
+          </select>
+        </div>
+
+        <!-- Run controls -->
+        <div class="run-controls">
+          <button class="run-btn play" id="btn-play" onclick="runGCode()" title="Run G-code">▶</button>
+          <button class="run-btn pause" id="btn-pause" onclick="pauseGCode()" title="Pause" disabled>⏸</button>
+          <button class="run-btn stop" id="btn-stop" onclick="stopGCode()" title="Stop" disabled>⏹</button>
+        </div>
+
+        <!-- Progress -->
+        <div class="run-progress" id="run-progress">
+          <div class="run-progress-fill" id="run-progress-fill"></div>
+        </div>
+        <div class="run-status" id="run-status"></div>
+
+      </div>
+      {% endif %}
 
       <div class="info-bar">
         <span id="zoom-display">Zoom: <strong>100%</strong></span>
@@ -757,6 +1152,7 @@
         <span>Board: <strong>{{ board.width_mm }} × {{ board.height_mm }} mm</strong></span>
         {% endif %}
         <span>Alignment: <strong>force_bounds</strong></span>
+        <span>Bed: <strong>210 × 297 mm (A4)</strong></span>
       </div>
 
     </main>
@@ -794,23 +1190,84 @@
       document.getElementById('active-count').textContent = `${active}/${totalLayers} visible`;
     }
 
-    function zoom(delta) {
-      currentZoom = Math.min(5, Math.max(0.2, currentZoom + delta));
+    // Pan state
+    let panX = 0, panY = 0;
+    let isPanning = false, panStartX = 0, panStartY = 0, panStartPX = 0, panStartPY = 0;
+
+    function zoomAtPoint(delta, cx, cy) {
+      // cx, cy = cursor position relative to viewport
+      const oldZoom = currentZoom;
+      const newZoom = Math.min(20, Math.max(0.2, currentZoom + delta));
+      if (newZoom === oldZoom) return;
+
+      // Adjust pan so the point under the cursor stays fixed
+      const scale = newZoom / oldZoom;
+      panX = cx - scale * (cx - panX);
+      panY = cy - scale * (cy - panY);
+
+      currentZoom = newZoom;
       applyZoom();
     }
 
-    function resetZoom() { currentZoom = 1.0; applyZoom(); }
+    function zoomAtCenter(delta) {
+      const vp = document.getElementById('viewport');
+      const rect = vp.getBoundingClientRect();
+      console.log('zoomAtCenter called, delta:', delta, 'rect:', rect.width, rect.height, 'currentZoom:', currentZoom);
+      zoomAtPoint(delta, rect.width / 2, rect.height / 2);
+    }
+
+    function resetZoom() {
+      currentZoom = 1.0;
+      panX = 0;
+      panY = 0;
+      applyZoom();
+    }
 
     function applyZoom() {
-      document.getElementById('layer-stack').style.transform = `scale(${currentZoom})`;
+      const stack = document.getElementById('layer-stack');
+      stack.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
       document.getElementById('zoom-display').innerHTML =
         `Zoom: <strong>${Math.round(currentZoom * 100)}%</strong>`;
     }
 
-    document.getElementById('viewport').addEventListener('wheel', (e) => {
+    // Zoom toward cursor on scroll wheel
+    const vp = document.getElementById('viewport');
+    vp.addEventListener('wheel', (e) => {
       e.preventDefault();
-      zoom(e.deltaY < 0 ? 0.15 : -0.15);
+      const rect = vp.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const delta = e.deltaY < 0 ? 0.15 : -0.15;
+      zoomAtPoint(delta, cx, cy);
     }, { passive: false });
+
+    // Drag-to-pan
+    vp.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return; // left click only
+      // Don't pan if clicking on controls
+      if (e.target.closest('.control-bar, .jog-panel, button, select, input')) return;
+      isPanning = true;
+      panStartX = e.clientX;
+      panStartY = e.clientY;
+      panStartPX = panX;
+      panStartPY = panY;
+      vp.classList.add('panning');
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isPanning) return;
+      panX = panStartPX + (e.clientX - panStartX);
+      panY = panStartPY + (e.clientY - panStartY);
+      applyZoom();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isPanning) {
+        isPanning = false;
+        vp.classList.remove('panning');
+      }
+    });
 
     function onLayerLoad() {
       loadedCount++;
@@ -819,6 +1276,11 @@
         document.getElementById('loading').classList.add('done');
         // Size the dimension wrapper to match the first loaded image
         sizeDimensions();
+        // Initialize head pointer after all layers are loaded
+        setTimeout(() => {
+          initTrailCanvas();
+          moveHead(0, 0, false);
+        }, 200);
       }
     }
 
@@ -952,6 +1414,474 @@
         alert('Failed to clear files: ' + err.message);
       }
     }
+
+    // ── G-code Conversion ───────────────────────────────
+
+    async function convertGCode() {
+      const btn = document.getElementById('btn-generate');
+      const downloadBtn = document.getElementById('btn-download');
+      const statsEl = document.getElementById('gcode-stats');
+
+      // Update button state
+      btn.disabled = true;
+      btn.classList.add('converting');
+      btn.textContent = '⏳ Converting...';
+      downloadBtn.classList.remove('visible');
+      statsEl.classList.remove('visible');
+
+      try {
+        const response = await fetch('/convert-gcode', { method: 'POST' });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.detail || 'Conversion failed');
+        }
+
+        const result = await response.json();
+
+        // Show success
+        btn.textContent = '✓ Conversion complete';
+        btn.classList.remove('converting');
+        btn.style.borderColor = 'var(--green)';
+        btn.style.color = 'var(--green)';
+
+        // Show download button
+        downloadBtn.classList.add('visible');
+
+        // Show stats
+        const s = result.stats;
+        statsEl.innerHTML = `
+          <strong>Conversion Results</strong><br>
+          Source: <strong>${result.copper_file}</strong><br>
+          Detection: <strong>${result.detection_method}</strong><br>
+          <br>
+          Tracks: <strong>${s.tracks_parsed}</strong><br>
+          Pads: <strong>${s.pads_parsed}</strong><br>
+          Toolpath cmds: <strong>${s.toolpath_commands}</strong><br>
+          G-code lines: <strong>${s.gcode_lines}</strong><br>
+          <br>
+          Draw distance: <strong>${s.draw_distance_mm} mm</strong><br>
+          Rapid travel: <strong>${s.rapid_distance_mm} mm</strong><br>
+          Work area: <strong>${s.work_area.width} × ${s.work_area.height} mm</strong>
+        `;
+        statsEl.classList.add('visible');
+
+        // Re-enable for re-conversion
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = '⚙ Re-generate G-code';
+          btn.style.borderColor = '';
+          btn.style.color = '';
+        }, 2000);
+
+      } catch (err) {
+        btn.textContent = '✗ ' + err.message;
+        btn.style.borderColor = '#ff4444';
+        btn.style.color = '#ff4444';
+        btn.classList.remove('converting');
+
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = '⚙ Generate G-code';
+          btn.style.borderColor = '';
+          btn.style.color = '';
+        }, 3000);
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // HEAD POINTER — Movement Engine
+    // ══════════════════════════════════════════════════════════════
+
+    // Coordinate mapping:
+    //   (0,0) = bottom-left corner of the PCB board
+    //   All positions on the board are positive
+    //   Bed = A4 (210 × 297 mm) — jog can move across the full bed
+    //
+    // SVG images use gerbonara coordinates (union bounds).
+    // To map bed coords to SVG:
+    //   svg_x = board_min_x + (bed_x / board_w) * board_w_svg
+    //   svg_y = board_max_y - (bed_y / board_h) * board_h_svg
+    //   where board_max_y = board_min_y + board_h_svg (in SVG Y-down)
+
+    // A4 bed dimensions
+    const BED_W = 210;  // mm
+    const BED_H = 297;  // mm
+
+    const MAP = {
+      // SVG union bounds (board edges in gerbonara coordinates)
+      board_min_x: {{ (board.min_x if board else 0) | tojson }},
+      board_min_y: {{ (board.min_y if board else 0) | tojson }},
+      board_w: {{ (board.width_mm if board else 100) | tojson }},
+      board_h: {{ (board.height_mm if board else 100) | tojson }},
+      // Toolpath offset (copper origin relative to parsed bounds)
+      offset_x: {{ (toolpath_offset.x if toolpath_offset else 0) | tojson }},
+      offset_y: {{ (toolpath_offset.y if toolpath_offset else 0) | tojson }},
+    };
+
+    // Current head position in G-code mm coordinates
+    let headX = 0, headY = 0;
+    let isRunning = false, isPaused = false;
+    let runTimer = null;
+    let toolpathData = null;
+    let currentCmdIndex = 0;
+
+    // Trail context
+    let trailCtx = null;
+
+    /**
+     * Get the actual image rect within the layer-stack.
+     * Uses getBoundingClientRect but divides by currentZoom to get
+     * pre-transform coordinates (pointer and canvas use pre-transform space).
+     */
+    function getImageRect() {
+      const img = document.querySelector('.layer-img:not(.hidden)');
+      const stack = document.getElementById('layer-stack');
+      if (!img || !stack) return null;
+
+      const imgRect = img.getBoundingClientRect();
+      const stackRect = stack.getBoundingClientRect();
+
+      // Divide by zoom to convert screen-space → local pre-transform space
+      return {
+        left: (imgRect.left - stackRect.left) / currentZoom,
+        top: (imgRect.top - stackRect.top) / currentZoom,
+        width: imgRect.width / currentZoom,
+        height: imgRect.height / currentZoom,
+      };
+    }
+
+    // One-time debug log: compare all 3 approaches
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const img = document.querySelector('.layer-img:not(.hidden)');
+        const stack = document.getElementById('layer-stack');
+        if (!img || !stack) return;
+
+        const ir = img.getBoundingClientRect();
+        const sr = stack.getBoundingClientRect();
+
+        console.log('=== IMAGE RECT DEBUG ===');
+        console.log('Zoom:', currentZoom);
+        console.log('Stack clientW/H:', stack.clientWidth, stack.clientHeight);
+        console.log('Img offsetL/T/W/H:', img.offsetLeft, img.offsetTop, img.offsetWidth, img.offsetHeight);
+        console.log('Img BoundingRect:', { l: ir.left, t: ir.top, w: ir.width, h: ir.height });
+        console.log('Stack BoundingRect:', { l: sr.left, t: sr.top, w: sr.width, h: sr.height });
+        console.log('Diff / zoom:', {
+          left: (ir.left - sr.left) / currentZoom,
+          top: (ir.top - sr.top) / currentZoom,
+          width: ir.width / currentZoom,
+          height: ir.height / currentZoom,
+        });
+        console.log('Manual center:', {
+          left: (stack.clientWidth - img.offsetWidth) / 2,
+          top: (stack.clientHeight - img.offsetHeight) / 2,
+          width: img.offsetWidth,
+          height: img.offsetHeight,
+        });
+        console.log('========================');
+      }, 2000);
+    });
+
+    function initTrailCanvas() {
+      const canvas = document.getElementById('trail-canvas');
+      const stack = document.getElementById('layer-stack');
+      if (!canvas || !stack) return;
+
+      // Use layout dims (pre-transform)
+      canvas.width = stack.clientWidth;
+      canvas.height = stack.clientHeight;
+      trailCtx = canvas.getContext('2d');
+    }
+
+    function clearTrail() {
+      if (trailCtx) {
+        trailCtx.clearRect(0, 0, trailCtx.canvas.width, trailCtx.canvas.height);
+      }
+    }
+
+    /**
+     * Convert bed position (mm) to pixel position within the layer-stack.
+     * (0,0) = bottom-left of board. All board positions are positive.
+     * Maps through SVG coordinate space to the actual image rect.
+     */
+    function bedToPixel(bx, by) {
+      const ir = getImageRect();
+      if (!ir) return { x: 0, y: 0 };
+
+      // Bed position → fraction of board
+      // X: 0 = left edge, board_w = right edge
+      // Y: 0 = bottom edge, board_h = top edge
+      const fracX = bx / MAP.board_w;
+      const fracY = 1.0 - (by / MAP.board_h);  // Y inverted: 0=bottom → fraction 1.0
+
+      // Fraction → pixel position on the actual rendered image
+      return {
+        x: ir.left + fracX * ir.width,
+        y: ir.top + fracY * ir.height,
+      };
+    }
+
+    /**
+     * Convert G-code coordinates (toolpath) to bed coordinates.
+     * G-code origin = copper min bounds; Bed origin = board bottom-left.
+     */
+    function gcodeToBed(gx, gy) {
+      // G-code coords are relative to copper min bounds (offset applied)
+      // Copper min bounds in SVG: (offset_x, offset_y)
+      // Board min bounds in SVG: (board_min_x, board_min_y) — but Y is inverted
+      //
+      // In the parsed data: y_parsed = -y_gerber, so:
+      //   gcode_x + offset_x = x_gerber (raw SVG x)
+      //   gcode_y + offset_y = y_parsed = -y_gerber
+      //
+      // Board extents in SVG: min_x to min_x+board_w (X), min_y to min_y+board_h (Y)
+      // SVG Y goes down, so min_y is the TOP of the board.
+      //
+      // bed_x = svg_x - board_min_x = (gcode_x + offset_x) - board_min_x
+      // bed_y_from_top = (svg_y - board_min_y) / board_h  where svg_y = -(gcode_y + offset_y)
+      // bed_y = board_h - bed_y_from_top * board_h
+
+      const svg_x = gx + MAP.offset_x;
+      const svg_y = -(gy + MAP.offset_y);
+
+      const bed_x = svg_x - MAP.board_min_x;
+      const bed_y = MAP.board_h - ((svg_y - MAP.board_min_y) / MAP.board_h) * MAP.board_h;
+
+      return { x: bed_x, y: bed_y };
+    }
+
+    /**
+     * Move the head pointer to the given bed position (mm).
+     * (0,0) = bottom-left of the board.
+     */
+    function moveHead(x, y, isDrawing = false) {
+      const fromPx = bedToPixel(headX, headY);
+      const toPx = bedToPixel(x, y);
+
+      // Draw trail if this is a draw move
+      if (isDrawing && trailCtx) {
+        trailCtx.beginPath();
+        trailCtx.moveTo(fromPx.x, fromPx.y);
+        trailCtx.lineTo(toPx.x, toPx.y);
+        trailCtx.strokeStyle = '#ff00ff';
+        trailCtx.lineWidth = 1.5;
+        trailCtx.lineCap = 'round';
+        trailCtx.stroke();
+      }
+
+      headX = x;
+      headY = y;
+
+      // Position pointer using absolute pixels within the stack
+      const pointer = document.getElementById('head-pointer');
+      pointer.style.left = toPx.x + 'px';
+      pointer.style.top = toPx.y + 'px';
+
+      // Toggle drawing style
+      if (isDrawing) {
+        pointer.classList.add('drawing');
+      } else {
+        pointer.classList.remove('drawing');
+      }
+
+      // Update readout
+      document.getElementById('pos-x').textContent = x.toFixed(2);
+      document.getElementById('pos-y').textContent = y.toFixed(2);
+    }
+
+    // ── D-pad Jog ────────────────────────────────────────────
+
+    function jogHead(dx, dy) {
+      if (isRunning) return; // Disable jog during run mode
+
+      const step = parseFloat(document.getElementById('jog-step').value);
+      let newX = headX + dx * step;
+      let newY = headY + dy * step;
+
+      // Clamp to A4 bed (0,0 = board bottom-left, can go full bed range)
+      newX = Math.max(0, Math.min(newX, BED_W));
+      newY = Math.max(0, Math.min(newY, BED_H));
+
+      moveHead(newX, newY, false);
+    }
+
+    function homeHead() {
+      if (isRunning) return;
+      moveHead(0, 0, false);
+      clearTrail();
+    }
+
+    // Keyboard controls: arrow keys for jog
+    document.addEventListener('keydown', (e) => {
+      // Don't capture if typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+      switch (e.key) {
+        case 'ArrowUp':    e.preventDefault(); jogHead(0, 1); break;
+        case 'ArrowDown':  e.preventDefault(); jogHead(0, -1); break;
+        case 'ArrowLeft':  e.preventDefault(); jogHead(-1, 0); break;
+        case 'ArrowRight': e.preventDefault(); jogHead(1, 0); break;
+        case 'Home':       e.preventDefault(); homeHead(); break;
+        case ' ':          e.preventDefault();
+          if (isRunning) pauseGCode();
+          else runGCode();
+          break;
+        case 'Escape':     stopGCode(); break;
+      }
+    });
+
+    // ── G-code Run Mode ──────────────────────────────────────
+
+    async function runGCode() {
+      if (isPaused) {
+        // Resume
+        isPaused = false;
+        document.getElementById('btn-pause').disabled = false;
+        document.getElementById('run-status').textContent = `Running... ${currentCmdIndex}/${toolpathData.commands.length}`;
+        setMode('run');
+        executeNextCommand();
+        return;
+      }
+
+      if (isRunning) return;
+
+      // Load toolpath data
+      try {
+        const res = await fetch('/toolpath');
+        if (!res.ok) {
+          alert('No toolpath data. Generate G-code first.');
+          return;
+        }
+        toolpathData = await res.json();
+      } catch (e) {
+        alert('Failed to load toolpath: ' + e.message);
+        return;
+      }
+
+      // Reset state
+      isRunning = true;
+      isPaused = false;
+      currentCmdIndex = 0;
+      moveHead(0, 0, false);
+      clearTrail();
+      initTrailCanvas();
+
+      // Update UI
+      setMode('run');
+      document.getElementById('btn-play').disabled = true;
+      document.getElementById('btn-pause').disabled = false;
+      document.getElementById('btn-stop').disabled = false;
+      document.getElementById('run-progress').classList.add('visible');
+      document.getElementById('run-status').classList.add('visible');
+      document.getElementById('run-status').textContent = `Running... 0/${toolpathData.commands.length}`;
+
+      // Start execution
+      executeNextCommand();
+    }
+
+    function executeNextCommand() {
+      if (!isRunning || isPaused || !toolpathData) return;
+      if (currentCmdIndex >= toolpathData.commands.length) {
+        finishRun();
+        return;
+      }
+
+      const cmd = toolpathData.commands[currentCmdIndex];
+      const isDrawMove = cmd.type === 'draw';
+      const isRapid = cmd.type === 'rapid';
+      const isPad = cmd.type === 'pad';
+
+      // Convert G-code coordinates to bed coordinates
+      const bedPos = gcodeToBed(cmd.x, cmd.y);
+
+      // Calculate movement distance for timing
+      const dx = bedPos.x - headX;
+      const dy = bedPos.y - headY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Move the pointer (in bed coordinates)
+      if (isDrawMove || isRapid) {
+        moveHead(bedPos.x, bedPos.y, isDrawMove);
+      } else if (isPad) {
+        moveHead(bedPos.x, bedPos.y, false);
+      }
+
+      // Update progress
+      currentCmdIndex++;
+      const pct = (currentCmdIndex / toolpathData.commands.length) * 100;
+      document.getElementById('run-progress-fill').style.width = pct + '%';
+      document.getElementById('run-status').textContent =
+        `${isDrawMove ? 'Drawing' : 'Moving'}... ${currentCmdIndex}/${toolpathData.commands.length}`;
+
+      // Calculate delay based on move type
+      // Rapid: fast (proportional to distance but quick)
+      // Draw: slower (simulates feed rate)
+      // Pad: dwell
+      let delay;
+      if (isPad) {
+        delay = 150;  // dwell on pad
+      } else if (isRapid) {
+        delay = Math.max(20, dist * 5);  // fast
+      } else {
+        delay = Math.max(30, dist * 15);  // drawing speed
+      }
+
+      runTimer = setTimeout(executeNextCommand, delay);
+    }
+
+    function pauseGCode() {
+      if (!isRunning) return;
+      isPaused = !isPaused;
+
+      if (isPaused) {
+        clearTimeout(runTimer);
+        document.getElementById('run-status').textContent =
+          `Paused at ${currentCmdIndex}/${toolpathData.commands.length}`;
+        document.getElementById('btn-play').disabled = false;
+      } else {
+        document.getElementById('btn-play').disabled = true;
+        executeNextCommand();
+      }
+    }
+
+    function stopGCode() {
+      clearTimeout(runTimer);
+      isRunning = false;
+      isPaused = false;
+      currentCmdIndex = 0;
+      toolpathData = null;
+
+      // Reset UI
+      setMode('jog');
+      document.getElementById('btn-play').disabled = false;
+      document.getElementById('btn-pause').disabled = true;
+      document.getElementById('btn-stop').disabled = true;
+      document.getElementById('run-progress').classList.remove('visible');
+      document.getElementById('run-status').classList.remove('visible');
+      document.getElementById('run-progress-fill').style.width = '0%';
+    }
+
+    function finishRun() {
+      isRunning = false;
+      isPaused = false;
+
+      document.getElementById('run-status').textContent = '✓ Fabrication complete';
+      document.getElementById('run-status').style.color = 'var(--green)';
+      document.getElementById('btn-play').disabled = false;
+      document.getElementById('btn-pause').disabled = true;
+
+      setTimeout(() => {
+        document.getElementById('run-status').style.color = '';
+      }, 3000);
+    }
+
+    function setMode(mode) {
+      const badge = document.getElementById('mode-badge');
+      badge.textContent = mode.toUpperCase();
+      badge.className = 'mode-badge ' + mode;
+    }
+
   </script>
 
 </body>
