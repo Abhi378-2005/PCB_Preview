@@ -20,20 +20,29 @@
     "directories": {
       "output": "release"
     },
+    "afterPack": "scripts/afterPack.js",
     "extraResources": [
       {
-        "from": "dist/pcb-preview-server",
+        "from": "backend-dist/pcb-preview-server",
         "to": "pcb-preview-server",
         "filter": [
           "**/*"
         ]
       }
     ],
+    "forceCodeSigning": false,
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "sign": null
     },
     "mac": {
-      "target": "dmg"
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "linux": {
       "target": "AppImage"

@@ -1,5 +1,6 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, dialog } = require('electron')
 const { spawn } = require('child_process')
+const fs = require('fs')
 const path = require('path')
 const net = require('net')
 
@@ -13,14 +14,43 @@ const createPyProc = async () => {
   // In development, it is in dist/pcb-preview-server.
   let exeName = process.platform === 'win32' ? 'pcb-preview-server.exe' : 'pcb-preview-server';
   let script = path.join(process.resourcesPath, 'pcb-preview-server', exeName)
-  let isPackaged = require('fs').existsSync(script)
+  let isPackaged = fs.existsSync(script)
 
   if (!isPackaged) {
+    script = path.join(__dirname, 'backend-dist', 'pcb-preview-server', exeName)
+  }
+
+  if (!fs.existsSync(script)) {
     script = path.join(__dirname, 'dist', 'pcb-preview-server', exeName)
+  }
+
+  if (!fs.existsSync(script)) {
+    dialog.showErrorBox(
+      'Backend not found',
+      `The bundled PCB preview server could not be found at:\n${script}`
+    )
+    app.quit()
+    return
+  }
+
+  if (process.platform !== 'win32') {
+    try {
+      fs.chmodSync(script, 0o755)
+    } catch (err) {
+      console.warn(`Could not update backend executable permissions: ${err.message}`)
+    }
   }
 
   console.log(`Starting Python server at ${script} on port ${port}`)
   pyProc = spawn(script, ['--port', port, '--no-browser'])
+
+  pyProc.on('error', (err) => {
+    dialog.showErrorBox(
+      'Backend failed to start',
+      `The PCB preview server could not be started.\n\n${err.message}`
+    )
+    app.quit()
+  })
 
   pyProc.stdout.on('data', (data) => {
     console.log(`stdout: ${data}`);
