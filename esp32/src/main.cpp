@@ -15,6 +15,8 @@
  */
 
 #include <Arduino.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 #include "motion.h"
 #include "gcode.h"
 #include "wifi_server.h"
@@ -24,6 +26,9 @@ static char serialBuffer[256];
 static int serialIdx = 0;
 
 void setup() {
+    // Disable brownout detector to prevent reset on current spikes (e.g. WiFi startup)
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
     Serial.begin(115200);
     delay(2000);
 

@@ -337,21 +337,13 @@ static void handleNotFound() {
 // ── Public API ────────────────────────────────────────────────────
 
 void initWiFi() {
-    // Scan for available networks first
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-    delay(500);
-
-    Serial.println("[wifi] Scanning...");
-    int n = WiFi.scanNetworks();
-    Serial.printf("[wifi] Networks found: %d\n", n);
-    for (int i = 0; i < n; i++) {
-        Serial.printf("[wifi]   %s\n", WiFi.SSID(i).c_str());
-    }
-
-    // Connect to configured AP
     Serial.printf("[wifi] Connecting to: %s\n", SSID);
+    WiFi.mode(WIFI_STA);
     WiFi.begin(SSID, PASSWORD);
+    
+    // Set TX power immediately after begin() to reduce current spikes
+    WiFi.setTxPower(WIFI_POWER_11dBm); 
+
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");

@@ -22,11 +22,25 @@ from fastapi.templating import Jinja2Templates
 from gerbonara import GerberFile
 import json as _json
 
+import sys
+
 # ── Paths ──────────────────────────────────────────────────────────
-BASE_DIR     = Path(__file__).resolve().parent.parent   # Test/
-GERBER_DIR   = BASE_DIR / "gerbers"
-TEMPLATE_DIR = BASE_DIR / "templates"
-OUTPUT_DIR   = BASE_DIR / "output"
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    BUNDLE_DIR = Path(sys._MEIPASS)
+else:
+    BUNDLE_DIR = Path(__file__).resolve().parent.parent
+
+# Read-only assets bundled with the executable
+TEMPLATE_DIR = BUNDLE_DIR / "templates"
+
+# Mutable user data paths created in the folder where the .exe is launched
+USER_DIR = Path.cwd()
+GERBER_DIR = USER_DIR / "gerbers"
+OUTPUT_DIR = USER_DIR / "output"
+
+# Ensure directories exist
+GERBER_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Layer colors (fg = feature color, bg = background) ─────────────
 # All layers use bg='none' (transparent) so they overlay cleanly

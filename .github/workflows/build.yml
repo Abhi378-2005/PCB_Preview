@@ -1,0 +1,35 @@
+name: Build Cross-Platform Executables
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allows you to manually trigger a build from the UI
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: pip install fastapi "uvicorn[standard]" gerbonara jinja2 python-multipart pyinstaller
+
+      - name: Build Executable with PyInstaller
+        run: pyinstaller --onefile --add-data "templates:templates" --name PCB-Preview main.py
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCB-Preview-${{ matrix.os }}
+          path: dist/
