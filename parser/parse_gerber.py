@@ -49,6 +49,7 @@ def parse_gerber(gerber_path: str, output_path: str = None):
     tracks = []    # line segments
     pads = []      # flash pads
     arcs = []      # arc segments
+    regions_list = []
 
     # Track bounding box for info
     min_x = float('inf')
@@ -56,12 +57,12 @@ def parse_gerber(gerber_path: str, output_path: str = None):
     max_x = float('-inf')
     max_y = float('-inf')
 
-    def update_bounds(x, y):
+    def update_bounds(x, y, r=0.0):
         nonlocal min_x, min_y, max_x, max_y
-        min_x = min(min_x, x)
-        min_y = min(min_y, y)
-        max_x = max(max_x, x)
-        max_y = max(max_y, y)
+        min_x = min(min_x, x - r)
+        min_y = min(min_y, y - r)
+        max_x = max(max_x, x + r)
+        max_y = max(max_y, y + r)
 
     def get_aperture_width(obj):
         """Extract the effective width/diameter of an aperture in mm."""
@@ -99,8 +100,8 @@ def parse_gerber(gerber_path: str, output_path: str = None):
                 "width": round(width, 4)
             })
 
-            update_bounds(x1, y1)
-            update_bounds(x2, y2)
+            update_bounds(x1, y1, width / 2)
+            update_bounds(x2, y2, width / 2)
 
         elif isinstance(obj, Arc):
             # Arc segment — approximate as line for now
@@ -130,8 +131,8 @@ def parse_gerber(gerber_path: str, output_path: str = None):
                 "width": round(width, 4)
             })
 
-            update_bounds(x1, y1)
-            update_bounds(x2, y2)
+            update_bounds(x1, y1, width / 2)
+            update_bounds(x2, y2, width / 2)
 
         elif isinstance(obj, Flash):
             # Flashed pad
@@ -147,7 +148,22 @@ def parse_gerber(gerber_path: str, output_path: str = None):
                 "diameter": round(width, 4)
             })
 
-            update_bounds(x, y)
+            update_bounds(x, y, width / 2)
+
+        elif type(obj).__name__ == 'Region':
+            # Filled polygon
+            poly_points = []
+            for seg in obj.iter_segments():
+                p1, p2, arc = seg
+                x1, y1 = float(p1[0]), float(-p1[1])
+                poly_points.append((x1, y1))
+                update_bounds(x1, y1, 0)
+                
+            if poly_points:
+                regions_list.append({
+                    "type": "region",
+                    "points": [(round(p[0], 4), round(p[1], 4)) for p in poly_points]
+                })
 
     # Build output structure
     result = {

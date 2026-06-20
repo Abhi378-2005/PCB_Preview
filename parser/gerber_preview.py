@@ -314,15 +314,23 @@ async def board_info():
     return _board_dims
 
 
-@app.get("/toolpath")
-async def get_toolpath():
-    """Return toolpath.json data for animation."""
-    toolpath_path = OUTPUT_DIR / "toolpath.json"
-    if not toolpath_path.exists():
-        raise HTTPException(status_code=404, detail="No toolpath. Run conversion first.")
+@app.get("/simulate", response_class=HTMLResponse)
+async def simulate(request: Request):
+    """Simulation visualizer page."""
+    _ensure_bounds()
 
-    with open(toolpath_path) as f:
-        return _json.load(f)
+    # Detect copper layer by content
+    copper_file = find_copper_layer()
+
+    return templates.TemplateResponse(
+        request,
+        "simulate.html",
+        {
+            "board": _board_dims or {},
+            "board_bg": BOARD_BG_COLOR,
+            "copper_file": copper_file,
+        },
+    )
 
 
 @app.post("/upload")
@@ -388,13 +396,12 @@ async def clear_gerbers():
 async def convert_gcode():
     """
     Find the copper layer (by content detection), run the full pipeline:
-      parse_gerber → toolpath_generator → gcode_generator
+      parse_gerber → raster_gcode
     Returns JSON with conversion status and stats.
     """
     # Import pipeline modules
     from parser.parse_gerber import parse_gerber
-    from parser.toolpath_generator import generate_toolpath
-    from parser.gcode_generator import generate_gcode
+    from parser.raster_gcode import generate_raster_gcode
 
     # Find copper layer
     copper_file = find_copper_layer()
@@ -409,22 +416,29 @@ async def convert_gcode():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     parsed_path = str(OUTPUT_DIR / "parsed_tracks.json")
-    toolpath_path = str(OUTPUT_DIR / "toolpath.json")
     gcode_path = str(OUTPUT_DIR / "output.gcode")
 
     try:
         # Step 1: Parse gerber
         parsed = parse_gerber(copper_path, parsed_path)
 
-        # Step 2: Generate optimized toolpath
-        toolpath = generate_toolpath(parsed_path, toolpath_path)
+        # Force parsed bounds to exactly match the SVG bounds (_board_dims)
+        # This prevents any alignment shifts between the G-code and the visual SVG.
+        # Note: parse_gerber inverts Y, so physical max_y is the minimum inverted Y.
+        if _board_dims:
+            parsed["bounds"]["min_x"] = _board_dims["min_x"]
+            parsed["bounds"]["max_x"] = _board_dims["max_x"]
+            parsed["bounds"]["min_y"] = -_board_dims["max_y"]
+            parsed["bounds"]["max_y"] = -_board_dims["min_y"]
+            parsed["bounds"]["width"] = _board_dims["width_mm"]
+            parsed["bounds"]["height"] = _board_dims["height_mm"]
+            
+            with open(parsed_path, 'w') as f:
+                import json
+                json.dump(parsed, f)
 
-        # Step 3: Generate G-code
-        generate_gcode(toolpath_path, gcode_path)
-
-        # Read generated G-code for stats
-        with open(gcode_path, 'r') as f:
-            gcode_lines = f.readlines()
+        # Step 2: Generate raster G-code (bypassing old toolpath generator)
+        raster_stats = generate_raster_gcode(parsed_path, gcode_path)
 
         return JSONResponse(content={
             "success": True,
@@ -433,11 +447,14 @@ async def convert_gcode():
             "stats": {
                 "tracks_parsed": parsed["statistics"]["total_tracks"],
                 "pads_parsed": parsed["statistics"]["total_pads"],
-                "toolpath_commands": toolpath["statistics"]["total_commands"],
-                "gcode_lines": len(gcode_lines),
-                "rapid_distance_mm": toolpath["statistics"]["total_rapid_distance_mm"],
-                "draw_distance_mm": toolpath["statistics"]["total_draw_distance_mm"],
-                "work_area": toolpath["work_area"],
+                "toolpath_commands": raster_stats["burn_moves"],
+                "gcode_lines": raster_stats["gcode_lines"],
+                "rapid_distance_mm": 0,
+                "draw_distance_mm": 0,
+                "work_area": {
+                    "width": parsed["bounds"]["width"],
+                    "height": parsed["bounds"]["height"]
+                },
             },
             "output_file": "output.gcode",
         })

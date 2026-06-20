@@ -1241,6 +1241,10 @@
           ⬇ Download output.gcode
         </a>
 
+        <a class="btn-download" id="btn-simulate" href="/simulate" target="_blank" style="border-color: #00d4ff; color: #00d4ff; background: rgba(0, 212, 255, 0.06); margin-top: 8px;">
+          ▶ Simulate G-Code (New Tab)
+        </a>
+
         <div class="gcode-stats" id="gcode-stats"></div>
       </div>
 
@@ -1699,6 +1703,7 @@
     async function convertGCode() {
       const btn = document.getElementById('btn-generate');
       const downloadBtn = document.getElementById('btn-download');
+      const simulateBtn = document.getElementById('btn-simulate');
       const statsEl = document.getElementById('gcode-stats');
 
       // Update button state
@@ -1706,6 +1711,7 @@
       btn.classList.add('converting');
       btn.textContent = '⏳ Converting...';
       downloadBtn.classList.remove('visible');
+      if(simulateBtn) simulateBtn.classList.remove('visible');
       statsEl.classList.remove('visible');
 
       try {
@@ -1724,8 +1730,9 @@
         btn.style.borderColor = 'var(--green)';
         btn.style.color = 'var(--green)';
 
-        // Show download button
+        // Show download and simulate buttons
         downloadBtn.classList.add('visible');
+        if(simulateBtn) simulateBtn.classList.add('visible');
 
         // Show stats
         const s = result.stats;

@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>G-Code Simulator - Antigravity</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --surface: #1a1d24;
+      --border: #2a2f3a;
+      --accent: #00d4ff;
+      --green: #00ff88;
+      --text: #e2e8f0;
+      --muted: #8b949e;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--surface);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .main-area {
+      flex: 1;
+      display: flex;
+      padding: 24px;
+      gap: 24px;
+    }
+
+    .sidebar {
+      width: 300px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .controls-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .control-group label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .range-slider {
+      width: 100%;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .btn.play { border-color: var(--green); color: var(--green); }
+    .btn.play:hover:not(:disabled) { background: rgba(0,255,136,0.1); }
+    
+    .btn.pause { border-color: #ffaa00; color: #ffaa00; }
+    
+    .btn.reset { border-color: #ff4444; color: #ff4444; }
+
+    .stats-panel {
+      margin-top: auto;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .stat-val {
+      color: var(--accent);
+    }
+
+    /* Board Area */
+    .board-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0c10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .board-wrapper {
+      position: relative;
+      /* Dimensions will be set via JS */
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      transform-origin: center center;
+      transition: transform 0.1s ease-out;
+      background: #88c563; /* Restore the green board background */
+    }
+
+    /* Base copper SVG (for preview toggle) */
+    .copper-layer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+      display: block; /* Visible by default */
+    }
+
+    /* Etch resist canvas (black overlay) */
+    .resist-canvas {
+      position: relative; /* relative so z-index works against absolute siblings */
+      width: 100%; height: 100%;
+      z-index: 5;
+    }
+
+    /* Laser pointer */
+    .laser-head {
+      position: absolute;
+      width: 4px; height: 4px;
+      background: #ff0000;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+      pointer-events: none;
+      box-shadow: 0 0 10px #ff0000;
+      display: none;
+    }
+
+    .laser-head.firing {
+      background: #fff;
+      box-shadow: 0 0 15px #00d4ff, 0 0 5px #fff;
+    }
+
+    .laser-crosshair {
+      position: absolute;
+      width: 100%; height: 100%;
+      top: 0; left: 0;
+      pointer-events: none;
+      z-index: 9;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Antigravity Simulator</h1>
+    <a href="/" style="color: var(--muted); text-decoration: none; font-size: 12px;">&larr; Back to Editor</a>
+  </header>
+
+  <div class="main-area">
+    <div class="board-container" id="board-container">
+      <div class="board-wrapper" id="board-wrapper">
+        <!-- Copper layer (for toggle view) -->
+        <img src="/render/{{ copper_file }}" class="copper-layer" id="copper-img">
+        
+        <!-- Black resist layer -->
+        <canvas class="resist-canvas" id="resist-canvas"></canvas>
+        
+        <!-- Laser Head -->
+        <div class="laser-head" id="laser-head"></div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="controls-panel">
+        <h3>Simulation Controls</h3>
+        <div class="control-group">
+          <label>Simulation Speed: <span id="speed-val">1x</span></label>
+          <input type="range" id="speed-slider" class="range-slider" min="1" max="1000" value="1" oninput="updateSpeed()">
+        </div>
+
+        <div class="btn-row">
+          <button class="btn play" id="btn-play" onclick="startSim()">PLAY</button>
+          <button class="btn pause" id="btn-pause" onclick="pauseSim()" disabled>PAUSE</button>
+          <button class="btn reset" id="btn-reset" onclick="resetSim()">RESET</button>
+        </div>
+        
+        <div class="control-group" style="margin-top: 15px;">
+          <button class="btn" id="toggle-preview-btn" onclick="togglePreview()" style="width: 100%;">Hide Preview Background</button>
+        </div>
+      </div>
+
+      <div class="stats-panel">
+        <div class="stat-row">
+          <span>G-Code Lines</span>
+          <span class="stat-val" id="stat-lines">0 / 0</span>
+        </div>
+        <div class="stat-row">
+          <span>X Pos</span>
+          <span class="stat-val" id="stat-x">0.00 mm</span>
+        </div>
+        <div class="stat-row">
+          <span>Y Pos</span>
+          <span class="stat-val" id="stat-y">0.00 mm</span>
+        </div>
+        <div class="stat-row">
+          <span>Laser</span>
+          <span class="stat-val" id="stat-laser" style="color: var(--muted)">OFF</span>
+        </div>
+        <div class="stat-row" style="margin-top: 10px; color: var(--green);" id="status-msg">
+          Ready to simulate
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Board Data from Server
+    const BOARD = {{ board | tojson }};
+    let W_MM_REAL = BOARD.width_mm || 0;
+    let H_MM_REAL = BOARD.height_mm || 0;
+    
+    // Scale mapping
+    let pxPerMm = 1;
+    
+    // State
+    let gcodeLines = [];
+    let currentLineIdx = 0;
+    let isRunning = false;
+    let isLaserOn = false;
+    let headX = 0;
+    let headY = 0;
+    let simSpeed = 1;
+    
+    let animFrame = null;
+    let ctx = null;
+
+    // UI Elements
+    const wrapper = document.getElementById('board-wrapper');
+    const canvas = document.getElementById('resist-canvas');
+    const laserHead = document.getElementById('laser-head');
+    const speedSlider = document.getElementById('speed-slider');
+    
+    const btnPlay = document.getElementById('btn-play');
+    const btnPause = document.getElementById('btn-pause');
+
+    // ── Setup Viewport ─────────────────────────
+    function initViewport() {
+      const container = document.getElementById('board-container');
+      const cw = container.clientWidth - 40;
+      const ch = container.clientHeight - 40;
+      
+      if (!W_MM_REAL || !H_MM_REAL) return;
+      
+      const scaleX = cw / W_MM_REAL;
+      const scaleY = ch / H_MM_REAL;
+      pxPerMm = Math.min(scaleX, scaleY);
+      
+      const pxW = W_MM_REAL * pxPerMm;
+      const pxH = H_MM_REAL * pxPerMm;
+      
+      wrapper.style.width = pxW + 'px';
+      wrapper.style.height = pxH + 'px';
+      
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = pxW * dpr;
+      canvas.height = pxH * dpr;
+      canvas.style.width = pxW + 'px';
+      canvas.style.height = pxH + 'px';
+      ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      
+      resetCanvas();
+    }
+
+    function resetCanvas() {
+      if (!ctx) return;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.clearRect(0, 0, W_MM_REAL * pxPerMm, H_MM_REAL * pxPerMm);
+      
+      ctx.strokeStyle = '#00ff00'; // Bright green color to vividly trace the removed parts
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      headX = 0;
+      headY = 0;
+      isLaserOn = false;
+      updateLaserPos(0, 0);
+      updateLaserState();
+    }
+
+    function mmToPx(x, y) {
+      return { x: x * pxPerMm, y: y * pxPerMm };
+    }
+
+    function updateLaserPos(x, y) {
+      const px = mmToPx(x, y);
+      laserHead.style.display = 'block';
+      laserHead.style.left = px.x + 'px';
+      laserHead.style.top = px.y + 'px';
+      document.getElementById('stat-x').textContent = x.toFixed(2) + ' mm';
+      document.getElementById('stat-y').textContent = y.toFixed(2) + ' mm';
+    }
+
+    let showPreview = true;
+    function togglePreview() {
+      showPreview = !showPreview;
+      const img = document.getElementById('copper-img');
+      const wrapper = document.getElementById('board-wrapper');
+      const btn = document.getElementById('toggle-preview-btn');
+      
+      if (showPreview) {
+        img.style.display = 'block';
+        wrapper.style.background = '#88c563'; // Green background for preview
+        btn.textContent = 'Hide Preview Background';
+      } else {
+        img.style.display = 'none';
+        wrapper.style.background = '#000000'; // Solid black spray-painted board
+        btn.textContent = 'Show Preview Background';
+      }
+    }
+
+    function updateLaserState() {
+      const el = document.getElementById('stat-laser');
+      if (isLaserOn) {
+        el.textContent = 'ON';
+        el.style.color = '#ff3366';
+        laserHead.classList.add('firing');
+      } else {
+        el.textContent = 'OFF';
+        el.style.color = 'var(--muted)';
+        laserHead.classList.remove('firing');
+      }
+    }
+
+    async function loadGcode() {
+      document.getElementById('status-msg').textContent = 'Loading G-code...';
+      try {
+        const res = await fetch('/download-gcode?t=' + new Date().getTime());
+        if (!res.ok) throw new Error('No G-code found');
+        const text = await res.text();
+        gcodeLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith(';'));
+        document.getElementById('stat-lines').textContent = `0 / ${gcodeLines.length}`;
+        document.getElementById('status-msg').textContent = 'Ready to simulate';
+      } catch (e) {
+        document.getElementById('status-msg').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function getParam(line, char) {
+      const regex = new RegExp(char + '([\\d\\.\\-]+)', 'i');
+      const match = line.match(regex);
+      return match ? parseFloat(match[1]) : null;
+    }
+
+    function executeNext() {
+      if (currentLineIdx >= gcodeLines.length) {
+        stopSim();
+        document.getElementById('status-msg').textContent = 'Simulation Complete!';
+        return;
+      }
+
+      const line = gcodeLines[currentLineIdx];
+      let moved = false;
+      let newX = headX;
+      let newY = headY;
+
+      if (line.startsWith('G0') || line.startsWith('G1')) {
+        const vx = getParam(line, 'X');
+        const vy = getParam(line, 'Y');
+        if (vx !== null) newX = vx;
+        if (vy !== null) newY = vy;
+        moved = true;
+      } else if (line.startsWith('M3') || line.startsWith('M4')) {
+        isLaserOn = true;
+        updateLaserState();
+      } else if (line.startsWith('M5')) {
+        isLaserOn = false;
+        updateLaserState();
+      }
+
+      if (moved) {
+        if (isLaserOn && line.startsWith('G1')) {
+          ctx.beginPath();
+          const startPx = mmToPx(headX, headY);
+          const endPx = mmToPx(newX, newY);
+          ctx.moveTo(startPx.x, startPx.y);
+          ctx.lineTo(endPx.x, endPx.y);
+          // The laser burns exactly the raster lines.
+          // Since the laser beam physical diameter is 0.2mm, we must simulate exactly a 0.2mm burn line.
+          // This perfectly matches the physical tool compensation in the G-code generator.
+          ctx.lineWidth = 0.2 * pxPerMm; 
+          ctx.stroke();
+        }
+        headX = newX;
+        headY = newY;
+        updateLaserPos(headX, headY);
+      }
+      currentLineIdx++;
+      if (currentLineIdx % 100 === 0) {
+        document.getElementById('stat-lines').textContent = `${currentLineIdx} / ${gcodeLines.length}`;
+      }
+    }
+
+    function loop() {
+      if (!isRunning) return;
+      for (let i = 0; i < simSpeed; i++) {
+        executeNext();
+        if (!isRunning) break;
+      }
+      animFrame = requestAnimationFrame(loop);
+    }
+
+    function startSim() {
+      if (gcodeLines.length === 0) return;
+      isRunning = true;
+      btnPlay.disabled = true;
+      btnPause.disabled = false;
+      document.getElementById('status-msg').textContent = 'Simulating...';
+      loop();
+    }
+
+    function pauseSim() {
+      isRunning = false;
+      btnPlay.disabled = false;
+      btnPause.disabled = true;
+      document.getElementById('status-msg').textContent = 'Paused';
+    }
+
+    function stopSim() {
+      isRunning = false;
+      btnPlay.disabled = false;
+      btnPause.disabled = true;
+    }
+
+    function resetSim() {
+      stopSim();
+      currentLineIdx = 0;
+      document.getElementById('stat-lines').textContent = `0 / ${gcodeLines.length}`;
+      document.getElementById('status-msg').textContent = 'Ready to simulate';
+      resetCanvas();
+    }
+
+
+    speedSlider.addEventListener('input', (e) => {
+      document.getElementById('speed-val').textContent = e.target.value + 'x';
+    });
+
+    // ── Zoom & Pan ─────────────────────────────
+    let scale = 1;
+    let translateX = 0;
+    let translateY = 0;
+    let isDragging = false;
+    let startDragX = 0;
+    let startDragY = 0;
+    
+    function applyTransform() {
+      wrapper.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    }
+    
+    document.getElementById('board-container').addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomSensitivity = 0.001;
+      const oldScale = scale;
+      scale -= e.deltaY * zoomSensitivity;
+      scale = Math.max(0.1, Math.min(scale, 10)); // limit zoom between 0.1x and 10x
+      applyTransform();
+    });
+
+    document.getElementById('board-container').addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startDragX = e.clientX - translateX;
+      startDragY = e.clientY - translateY;
+      document.getElementById('board-container').style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      translateX = e.clientX - startDragX;
+      translateY = e.clientY - startDragY;
+      applyTransform();
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+      document.getElementById('board-container').style.cursor = 'default';
+    });
+
+    window.addEventListener('resize', () => {
+      if (currentLineIdx === 0) {
+        initViewport();
+        scale = 1;
+        translateX = 0;
+        translateY = 0;
+        applyTransform();
+      }
+    });
+
+    // Init
+    initViewport();
+    loadGcode();
+
+  </script>
+</body>
+</html>
