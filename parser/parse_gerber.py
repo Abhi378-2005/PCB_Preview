@@ -84,9 +84,9 @@ def parse_gerber(gerber_path: str, output_path: str = None):
             # Line segment (trace)
             # gerbonara uses mm by default
             x1 = float(obj.x1)
-            y1 = float(-obj.y1)  # Gerber Y is inverted vs physical
+            y1 = float(obj.y1)
             x2 = float(obj.x2)
-            y2 = float(-obj.y2)
+            y2 = float(obj.y2)
 
             width = get_aperture_width(obj)
 
@@ -105,9 +105,9 @@ def parse_gerber(gerber_path: str, output_path: str = None):
         elif isinstance(obj, Arc):
             # Arc segment — approximate as line for now
             x1 = float(obj.x1)
-            y1 = float(-obj.y1)
+            y1 = float(obj.y1)
             x2 = float(obj.x2)
-            y2 = float(-obj.y2)
+            y2 = float(obj.y2)
 
             width = get_aperture_width(obj)
 
@@ -136,7 +136,7 @@ def parse_gerber(gerber_path: str, output_path: str = None):
         elif isinstance(obj, Flash):
             # Flashed pad
             x = float(obj.x)
-            y = float(-obj.y)
+            y = float(obj.y)
 
             width = get_aperture_width(obj)
 

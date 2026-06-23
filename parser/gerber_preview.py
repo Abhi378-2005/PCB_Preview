@@ -385,60 +385,171 @@ async def clear_gerbers():
 
 
 @app.post("/convert-gcode")
-async def convert_gcode():
+async def convert_gcode(scale: int = 1, layers: str = "",
+                        mode: str = "trace", line_spacing: float = 0.1,
+                        laser_diameter: float = 0.2):
     """
-    Find the copper layer (by content detection), run the full pipeline:
-      parse_gerber → toolpath_generator → gcode_generator
-    Returns JSON with conversion status and stats.
+    Run the full pipeline on selected layer files.
+
+    Modes:
+      - trace:  Vector tracing along copper paths (default)
+      - raster: Horizontal scan lines that SKIP copper (for etch-resist removal)
+
+    Accepts:
+      ?scale=N             (1, 2, 5, 10)
+      ?layers=f1,f2,f3     (comma-separated filenames of active layers)
+      ?mode=trace|raster   (toolpath generation mode)
+      ?line_spacing=0.1    (raster scan line spacing in mm)
+      ?laser_diameter=0.2  (physical laser spot size in mm)
     """
+    # Clamp scale to allowed values
+    if scale not in (1, 2, 3, 5, 10):
+        scale = 1
+
+    # Validate mode
+    if mode not in ("trace", "raster"):
+        mode = "trace"
+
+    # Clamp line spacing and laser diameter
+    line_spacing = max(0.05, min(2.0, line_spacing))
+    laser_diameter = max(0.05, min(1.0, laser_diameter))
+
     # Import pipeline modules
     from parser.parse_gerber import parse_gerber
     from parser.toolpath_generator import generate_toolpath
+    from parser.raster_generator import generate_raster_toolpath
     from parser.gcode_generator import generate_gcode
+    import json as json_mod
 
-    # Find copper layer
-    copper_file = find_copper_layer()
-    if not copper_file:
-        raise HTTPException(
-            status_code=400,
-            detail="No copper layer (.gbr with FileFunction=Copper) found. "
-                   "Upload an F_Cu.gbr file first."
-        )
-
-    copper_path = str(GERBER_DIR / copper_file)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    parsed_path = str(OUTPUT_DIR / "parsed_tracks.json")
+    # Determine which files to process
+    if layers.strip():
+        layer_files = [f.strip() for f in layers.split(",") if f.strip()]
+    else:
+        # Fallback: auto-detect copper layer
+        copper_file = find_copper_layer()
+        if not copper_file:
+            raise HTTPException(
+                status_code=400,
+                detail="No layers selected and no copper layer found. "
+                       "Toggle at least one layer on, or upload a .gbr file."
+            )
+        layer_files = [copper_file]
+
+    # Validate all files exist
+    valid_files = []
+    for f in layer_files:
+        path = GERBER_DIR / f
+        if path.exists():
+            valid_files.append(f)
+    if not valid_files:
+        raise HTTPException(
+            status_code=400,
+            detail=f"None of the selected layer files exist: {layer_files}"
+        )
+
     toolpath_path = str(OUTPUT_DIR / "toolpath.json")
     gcode_path = str(OUTPUT_DIR / "output.gcode")
 
     try:
-        # Step 1: Parse gerber
-        parsed = parse_gerber(copper_path, parsed_path)
+        # Step 1: Parse each layer and merge tracks + pads
+        all_tracks = []
+        all_pads = []
+        total_parsed_tracks = 0
+        total_parsed_pads = 0
+        min_x = float('inf')
+        min_y = float('inf')
+        max_x = float('-inf')
+        max_y = float('-inf')
 
-        # Step 2: Generate optimized toolpath
-        toolpath = generate_toolpath(parsed_path, toolpath_path)
+        for i, filename in enumerate(valid_files):
+            file_path = str(GERBER_DIR / filename)
+            per_file_output = str(OUTPUT_DIR / f"parsed_{i}.json")
+            parsed = parse_gerber(file_path, per_file_output)
 
-        # Step 3: Generate G-code
-        generate_gcode(toolpath_path, gcode_path)
+            all_tracks.extend(parsed.get("tracks", []))
+            all_pads.extend(parsed.get("pads", []))
+            total_parsed_tracks += parsed["statistics"]["total_tracks"]
+            total_parsed_pads += parsed["statistics"]["total_pads"]
+
+            b = parsed["bounds"]
+            min_x = min(min_x, b["min_x"])
+            min_y = min(min_y, b["min_y"])
+            max_x = max(max_x, b["max_x"])
+            max_y = max(max_y, b["max_y"])
+
+        # Build merged parsed output
+        merged_parsed_path = str(OUTPUT_DIR / "parsed_tracks.json")
+        merged = {
+            "source_file": ", ".join(valid_files),
+            "units": "mm",
+            "bounds": {
+                "min_x": round(min_x, 4),
+                "min_y": round(min_y, 4),
+                "max_x": round(max_x, 4),
+                "max_y": round(max_y, 4),
+                "width": round(max_x - min_x, 4),
+                "height": round(max_y - min_y, 4),
+            },
+            "statistics": {
+                "total_tracks": total_parsed_tracks,
+                "total_pads": total_parsed_pads,
+                "total_arcs": 0,
+            },
+            "tracks": all_tracks,
+            "pads": all_pads,
+        }
+        with open(merged_parsed_path, 'w') as f:
+            json_mod.dump(merged, f, indent=2)
+
+        print(f"[convert] Merged {len(valid_files)} layers: {total_parsed_tracks} tracks, {total_parsed_pads} pads")
+        print(f"[convert] Mode: {mode}")
+
+        # Step 2: Generate toolpath (mode-dependent)
+        if mode == "raster":
+            toolpath = generate_raster_toolpath(
+                merged_parsed_path, toolpath_path,
+                line_spacing=line_spacing,
+                laser_diameter=laser_diameter
+            )
+        else:
+            toolpath = generate_toolpath(merged_parsed_path, toolpath_path)
+
+        # Step 3: Generate G-code (with scale)
+        generate_gcode(toolpath_path, gcode_path, scale=scale)
 
         # Read generated G-code for stats
         with open(gcode_path, 'r') as f:
             gcode_lines = f.readlines()
 
+        scaled_work_area = {
+            "width": round(toolpath["work_area"]["width"] * scale, 2),
+            "height": round(toolpath["work_area"]["height"] * scale, 2),
+        }
+
+        response_stats = {
+            "tracks_parsed": total_parsed_tracks,
+            "pads_parsed": total_parsed_pads,
+            "toolpath_commands": toolpath["statistics"]["total_commands"],
+            "gcode_lines": len(gcode_lines),
+            "rapid_distance_mm": round(toolpath["statistics"]["total_rapid_distance_mm"] * scale, 2),
+            "draw_distance_mm": round(toolpath["statistics"]["total_draw_distance_mm"] * scale, 2),
+            "work_area": scaled_work_area,
+            "scale": scale,
+            "mode": mode,
+            "layers_count": len(valid_files),
+        }
+
+        # Add raster-specific stats
+        if mode == "raster":
+            response_stats["scan_lines"] = toolpath["statistics"].get("scan_lines", 0)
+            response_stats["line_spacing"] = line_spacing
+
         return JSONResponse(content={
             "success": True,
-            "copper_file": copper_file,
-            "detection_method": "content (TF.FileFunction)",
-            "stats": {
-                "tracks_parsed": parsed["statistics"]["total_tracks"],
-                "pads_parsed": parsed["statistics"]["total_pads"],
-                "toolpath_commands": toolpath["statistics"]["total_commands"],
-                "gcode_lines": len(gcode_lines),
-                "rapid_distance_mm": toolpath["statistics"]["total_rapid_distance_mm"],
-                "draw_distance_mm": toolpath["statistics"]["total_draw_distance_mm"],
-                "work_area": toolpath["work_area"],
-            },
+            "source_files": ", ".join(valid_files),
+            "stats": response_stats,
             "output_file": "output.gcode",
         })
 

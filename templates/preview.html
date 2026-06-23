@@ -1222,18 +1222,54 @@
       <!-- G-code Conversion -->
       <h2>G-code Conversion</h2>
       <div class="gcode-section">
-        <div class="copper-status">
-          Copper layer:
-          {% if copper_file %}
-          <span class="detected">✓ {{ copper_file }}</span>
-          {% else %}
-          <span class="not-found">✗ Not found</span>
-          {% endif %}
+        <div class="copper-status" id="gcode-layer-status">
+          Selected layers: <span class="detected" id="gcode-layer-count">0</span>
+        </div>
+
+        <div style="margin-bottom:10px;">
+          <label style="font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;">Mode</label>
+          <select class="step-select" id="gcode-mode" style="width:100%;margin-top:4px;" onchange="toggleRasterOptions()">
+            <option value="trace">🔧 Vector Trace — trace copper paths</option>
+            <option value="raster">▓ Raster Etch — etch around copper</option>
+          </select>
+        </div>
+
+        <div id="raster-options" style="display:none;margin-bottom:10px;">
+          <label style="font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;">Line Spacing</label>
+          <select class="step-select" id="gcode-line-spacing" style="width:100%;margin-top:4px;">
+            <option value="0.05">0.05 mm — Ultra fine (slow)</option>
+            <option value="0.1" selected>0.10 mm — Fine (default)</option>
+            <option value="0.15">0.15 mm — Medium</option>
+            <option value="0.2">0.20 mm — Coarse</option>
+            <option value="1.0">1.00 mm — Wide</option>
+            <option value="1.2">1.20 mm — Wide+</option>
+            <option value="1.5">1.50 mm — Extra wide</option>
+            <option value="2.0">2.00 mm — Maximum (fast)</option>
+          </select>
+          <label style="font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-top:8px;display:block;">Laser Spot Size</label>
+          <select class="step-select" id="gcode-laser-diameter" style="width:100%;margin-top:4px;">
+            <option value="0.1">0.10 mm</option>
+            <option value="0.15">0.15 mm</option>
+            <option value="0.2" selected>0.20 mm (your laser)</option>
+            <option value="0.3">0.30 mm</option>
+            <option value="0.5">0.50 mm</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:10px;">
+          <label style="font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;">Output Scale</label>
+          <select class="step-select" id="gcode-scale" style="width:100%;margin-top:4px;">
+            <option value="1">×1 — Original (1:1)</option>
+            <option value="2">×2 — Double</option>
+            <option value="3">×3 — Triple</option>
+            <option value="5">×5 — 5× Larger</option>
+            <option value="10">×10 — 10× Larger</option>
+          </select>
         </div>
 
         <button class="btn-generate" id="btn-generate"
           onclick="convertGCode()"
-          {% if not copper_file %}disabled title="Upload a copper layer first"{% endif %}>
+          {% if not files %}disabled title="Upload Gerber files first"{% endif %}>
           ⚙ Generate G-code
         </button>
 
@@ -1467,6 +1503,13 @@
     function updateActiveCount() {
       const active = document.querySelectorAll('.layer-item.active').length;
       document.getElementById('active-count').textContent = `${active}/${totalLayers} visible`;
+      // Update G-code section layer count
+      const countEl = document.getElementById('gcode-layer-count');
+      if (countEl) {
+        const names = Array.from(document.querySelectorAll('.layer-item.active'))
+          .map(el => el.getAttribute('data-file')).filter(f => f);
+        countEl.textContent = names.length > 0 ? names.join(', ') : 'None';
+      }
     }
 
     // Pan state
@@ -1681,6 +1724,12 @@
       }
     }
 
+    function toggleRasterOptions() {
+      const mode = document.getElementById('gcode-mode').value;
+      const rasterOpts = document.getElementById('raster-options');
+      rasterOpts.style.display = mode === 'raster' ? 'block' : 'none';
+    }
+
     async function clearAll() {
       if (!confirm('Remove all .gbr files and clear the preview?')) return;
 
@@ -1709,7 +1758,19 @@
       statsEl.classList.remove('visible');
 
       try {
-        const response = await fetch('/convert-gcode', { method: 'POST' });
+        const scale = document.getElementById('gcode-scale').value;
+        const mode = document.getElementById('gcode-mode').value;
+        const lineSpacing = document.getElementById('gcode-line-spacing').value;
+        const laserDiameter = document.getElementById('gcode-laser-diameter').value;
+        // Collect active (visible) layer filenames
+        const activeLayers = Array.from(document.querySelectorAll('.layer-item.active'))
+          .map(el => el.getAttribute('data-file'))
+          .filter(f => f);
+        if (activeLayers.length === 0) {
+          throw new Error('No layers selected. Toggle at least one layer on.');
+        }
+        const layersParam = encodeURIComponent(activeLayers.join(','));
+        const response = await fetch(`/convert-gcode?scale=${scale}&mode=${mode}&line_spacing=${lineSpacing}&laser_diameter=${laserDiameter}&layers=${layersParam}`, { method: 'POST' });
 
         if (!response.ok) {
           const err = await response.json();
@@ -1729,10 +1790,10 @@
 
         // Show stats
         const s = result.stats;
-        statsEl.innerHTML = `
+        let statsHtml = `
           <strong>Conversion Results</strong><br>
-          Source: <strong>${result.copper_file}</strong><br>
-          Detection: <strong>${result.detection_method}</strong><br>
+          Mode: <strong>${s.mode === 'raster' ? '▓ Raster Etch' : '🔧 Vector Trace'}</strong><br>
+          Source: <strong>${result.source_files}</strong><br>
           <br>
           Tracks: <strong>${s.tracks_parsed}</strong><br>
           Pads: <strong>${s.pads_parsed}</strong><br>
@@ -1741,8 +1802,17 @@
           <br>
           Draw distance: <strong>${s.draw_distance_mm} mm</strong><br>
           Rapid travel: <strong>${s.rapid_distance_mm} mm</strong><br>
-          Work area: <strong>${s.work_area.width} × ${s.work_area.height} mm</strong>
+          Work area: <strong>${s.work_area.width} × ${s.work_area.height} mm</strong><br>
+          Scale: <strong>${s.scale || '1'}×</strong>
         `;
+        if (s.mode === 'raster') {
+          statsHtml += `<br><br>
+            <strong>Raster Settings</strong><br>
+            Scan lines: <strong>${s.scan_lines}</strong><br>
+            Line spacing: <strong>${s.line_spacing} mm</strong>
+          `;
+        }
+        statsEl.innerHTML = statsHtml;
         statsEl.classList.add('visible');
 
         // Re-enable for re-conversion
@@ -1832,6 +1902,7 @@
 
     // One-time debug log: compare all 3 approaches
     window.addEventListener('load', () => {
+      updateActiveCount(); // Initialize G-code layer count
       setTimeout(() => {
         const img = document.querySelector('.layer-img:not(.hidden)');
         const stack = document.getElementById('layer-stack');
@@ -1867,10 +1938,18 @@
       const stack = document.getElementById('layer-stack');
       if (!canvas || !stack) return;
 
-      // Use layout dims (pre-transform)
-      canvas.width = stack.clientWidth;
-      canvas.height = stack.clientHeight;
+      // HiDPI: scale canvas buffer for sharp rendering on Retina displays
+      const dpr = window.devicePixelRatio || 1;
+      const w = stack.clientWidth;
+      const h = stack.clientHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
       trailCtx = canvas.getContext('2d');
+      trailCtx.scale(dpr, dpr);
+      // Disable anti-aliasing for crisp pixel edges
+      trailCtx.imageSmoothingEnabled = false;
     }
 
     function clearTrail() {
@@ -1907,25 +1986,10 @@
      */
     function gcodeToBed(gx, gy) {
       // G-code coords are relative to copper min bounds (offset applied)
-      // Copper min bounds in SVG: (offset_x, offset_y)
-      // Board min bounds in SVG: (board_min_x, board_min_y) — but Y is inverted
-      //
-      // In the parsed data: y_parsed = -y_gerber, so:
-      //   gcode_x + offset_x = x_gerber (raw SVG x)
-      //   gcode_y + offset_y = y_parsed = -y_gerber
-      //
-      // Board extents in SVG: min_x to min_x+board_w (X), min_y to min_y+board_h (Y)
-      // SVG Y goes down, so min_y is the TOP of the board.
-      //
-      // bed_x = svg_x - board_min_x = (gcode_x + offset_x) - board_min_x
-      // bed_y_from_top = (svg_y - board_min_y) / board_h  where svg_y = -(gcode_y + offset_y)
-      // bed_y = board_h - bed_y_from_top * board_h
-
-      const svg_x = gx + MAP.offset_x;
-      const svg_y = -(gy + MAP.offset_y);
-
-      const bed_x = svg_x - MAP.board_min_x;
-      const bed_y = MAP.board_h - ((svg_y - MAP.board_min_y) / MAP.board_h) * MAP.board_h;
+      // bed_x = gcode_x + offset_x - board_min_x
+      // bed_y = gcode_y + offset_y - board_min_y
+      const bed_x = gx + MAP.offset_x - MAP.board_min_x;
+      const bed_y = gy + MAP.offset_y - MAP.board_min_y;
 
       return { x: bed_x, y: bed_y };
     }
@@ -1944,8 +2008,8 @@
         trailCtx.moveTo(fromPx.x, fromPx.y);
         trailCtx.lineTo(toPx.x, toPx.y);
         trailCtx.strokeStyle = '#ff00ff';
-        trailCtx.lineWidth = 1.5;
-        trailCtx.lineCap = 'round';
+        trailCtx.lineWidth = 1;
+        trailCtx.lineCap = 'butt';
         trailCtx.stroke();
       }
 
