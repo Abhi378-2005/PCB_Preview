@@ -160,11 +160,26 @@ def complement_intervals(intervals, x_min, x_max):
 
 # ── Main Generator ────────────────────────────────────────────────
 
+def apply_orientation(x, y, board_w, board_h, orientation):
+    """
+    Transform a normalized (x, y) coordinate according to the chosen orientation.
+    All orientations keep (0,0) as the laser home/origin.
+    """
+    if orientation == 'rot90':
+        return round(board_h - y, 4), round(x, 4)
+    elif orientation == 'rot180':
+        return round(board_w - x, 4), round(board_h - y, 4)
+    elif orientation == 'rot270':
+        return round(y, 4), round(board_w - x, 4)
+    return round(x, 4), round(y, 4)  # normal
+
+
 def generate_raster_toolpath(input_path=None, output_path=None,
                               line_spacing=DEFAULT_LINE_SPACING,
                               margin=DEFAULT_MARGIN,
                               safety_gap=None,
-                              laser_diameter=DEFAULT_LASER_DIAMETER):
+                              laser_diameter=DEFAULT_LASER_DIAMETER,
+                              orientation='normal'):
     """
     Generate a raster etch toolpath from parsed Gerber geometry.
 
@@ -183,6 +198,7 @@ def generate_raster_toolpath(input_path=None, output_path=None,
         margin:          Extra etch area around board bounds in mm (default: 1.0)
         safety_gap:      Override clearance around copper (default: auto from laser_diameter)
         laser_diameter:  Physical laser spot size in mm (default: 0.2)
+        orientation:     Board orientation: 'normal', 'mirror_x', 'rot90', 'rot180'
 
     Returns:
         dict — the toolpath data (also written to output_path)
@@ -286,51 +302,39 @@ def generate_raster_toolpath(input_path=None, output_path=None,
             if line_num % 2 == 0:
                 # Even lines: left → right
                 for seg_start, seg_end in burn_segments:
+                    # Apply orientation transform to the two endpoints
+                    ox1, oy1 = apply_orientation(seg_start, scan_y, board_w, board_h, orientation)
+                    ox2, oy2 = apply_orientation(seg_end, scan_y, board_w, board_h, orientation)
                     rapid_dist = math.sqrt(
-                        (seg_start - current_x) ** 2 +
-                        (scan_y - current_y) ** 2
+                        (ox1 - current_x) ** 2 +
+                        (oy1 - current_y) ** 2
                     )
                     total_rapid_dist += rapid_dist
-                    commands.append({
-                        'type': 'rapid',
-                        'x': round(seg_start, 4),
-                        'y': round(scan_y, 4),
-                    })
-                    current_x, current_y = seg_start, scan_y
+                    commands.append({'type': 'rapid', 'x': ox1, 'y': oy1})
+                    current_x, current_y = ox1, oy1
 
-                    draw_dist = abs(seg_end - seg_start)
+                    draw_dist = math.sqrt((ox2 - ox1) ** 2 + (oy2 - oy1) ** 2)
                     total_draw_dist += draw_dist
-                    commands.append({
-                        'type': 'draw',
-                        'x': round(seg_end, 4),
-                        'y': round(scan_y, 4),
-                        'width': line_spacing,
-                    })
-                    current_x = seg_end
+                    commands.append({'type': 'draw', 'x': ox2, 'y': oy2, 'width': line_spacing})
+                    current_x, current_y = ox2, oy2
             else:
                 # Odd lines: right → left
                 for seg_start, seg_end in reversed(burn_segments):
+                    # Apply orientation transform to the two endpoints (reversed direction)
+                    ox1, oy1 = apply_orientation(seg_end, scan_y, board_w, board_h, orientation)
+                    ox2, oy2 = apply_orientation(seg_start, scan_y, board_w, board_h, orientation)
                     rapid_dist = math.sqrt(
-                        (seg_end - current_x) ** 2 +
-                        (scan_y - current_y) ** 2
+                        (ox1 - current_x) ** 2 +
+                        (oy1 - current_y) ** 2
                     )
                     total_rapid_dist += rapid_dist
-                    commands.append({
-                        'type': 'rapid',
-                        'x': round(seg_end, 4),
-                        'y': round(scan_y, 4),
-                    })
-                    current_x, current_y = seg_end, scan_y
+                    commands.append({'type': 'rapid', 'x': ox1, 'y': oy1})
+                    current_x, current_y = ox1, oy1
 
-                    draw_dist = abs(seg_end - seg_start)
+                    draw_dist = math.sqrt((ox2 - ox1) ** 2 + (oy2 - oy1) ** 2)
                     total_draw_dist += draw_dist
-                    commands.append({
-                        'type': 'draw',
-                        'x': round(seg_start, 4),
-                        'y': round(scan_y, 4),
-                        'width': line_spacing,
-                    })
-                    current_x = seg_start
+                    commands.append({'type': 'draw', 'x': ox2, 'y': oy2, 'width': line_spacing})
+                    current_x, current_y = ox2, oy2
 
         scan_y += line_spacing
         line_num += 1
@@ -354,8 +358,8 @@ def generate_raster_toolpath(input_path=None, output_path=None,
             'y': round(offset_y, 4),
         },
         'work_area': {
-            'width': round(board_w, 4),
-            'height': round(board_h, 4),
+            'width': round(board_h if orientation in ['rot90', 'rot270'] else board_w, 4),
+            'height': round(board_w if orientation in ['rot90', 'rot270'] else board_h, 4),
         },
         'statistics': {
             'total_commands': len(commands),

@@ -86,13 +86,35 @@ def optimize_toolpath(segments):
     return ordered
 
 
-def generate_toolpath(input_path: str = None, output_path: str = None):
+def apply_orientation(x, y, board_w, board_h, orientation):
+    """
+    Transform a normalized (x, y) coordinate according to the chosen orientation.
+    All orientations keep (0,0) as the laser home/origin.
+
+    Orientations:
+      normal — no change
+      rot90  — rotate 90° CCW:  (x, y) → (board_h - y, x)
+      rot180 — rotate 180°:     (x, y) → (board_w - x, board_h - y)
+      rot270 — rotate 270° CCW: (x, y) → (y, board_w - x)
+    """
+    if orientation == 'rot90':
+        return round(board_h - y, 4), round(x, 4)
+    elif orientation == 'rot180':
+        return round(board_w - x, 4), round(board_h - y, 4)
+    elif orientation == 'rot270':
+        return round(y, 4), round(board_w - x, 4)
+    return round(x, 4), round(y, 4)  # normal
+
+
+def generate_toolpath(input_path: str = None, output_path: str = None,
+                      orientation: str = 'normal'):
     """
     Generate toolpath from parsed tracks.
 
     Args:
-        input_path:  Path to parsed_tracks.json
-        output_path: Path for output toolpath.json
+        input_path:   Path to parsed_tracks.json
+        output_path:  Path for output toolpath.json
+        orientation:  Board orientation: 'normal', 'mirror_x', 'rot90', 'rot180'
     """
     if input_path is None:
         input_path = str(PROJECT_ROOT / "output" / "parsed_tracks.json")
@@ -110,28 +132,30 @@ def generate_toolpath(input_path: str = None, output_path: str = None):
 
     print(f"[toolpath] Input: {len(tracks)} tracks, {len(pads)} pads")
 
+    board_w = round(bounds.get('width', 0), 4)
+    board_h = round(bounds.get('height', 0), 4)
+
     # Normalize coordinates: shift so min corner is at origin
-    # This makes all coordinates positive for the plotter
     offset_x = bounds.get('min_x', 0)
     offset_y = bounds.get('min_y', 0)
 
-    # Apply offset to tracks
+    # Apply offset and orientation transform to tracks
     normalized_tracks = []
     for track in tracks:
+        x1, y1 = apply_orientation(track['x1'] - offset_x, track['y1'] - offset_y, board_w, board_h, orientation)
+        x2, y2 = apply_orientation(track['x2'] - offset_x, track['y2'] - offset_y, board_w, board_h, orientation)
         normalized_tracks.append({
-            'x1': round(track['x1'] - offset_x, 4),
-            'y1': round(track['y1'] - offset_y, 4),
-            'x2': round(track['x2'] - offset_x, 4),
-            'y2': round(track['y2'] - offset_y, 4),
+            'x1': x1, 'y1': y1,
+            'x2': x2, 'y2': y2,
             'width': track.get('width', 0.2)
         })
 
-    # Apply offset to pads
+    # Apply offset and orientation transform to pads
     normalized_pads = []
     for pad in pads:
+        px, py = apply_orientation(pad['x'] - offset_x, pad['y'] - offset_y, board_w, board_h, orientation)
         normalized_pads.append({
-            'x': round(pad['x'] - offset_x, 4),
-            'y': round(pad['y'] - offset_y, 4),
+            'x': px, 'y': py,
             'diameter': pad.get('diameter', 1.0)
         })
 
@@ -201,8 +225,8 @@ def generate_toolpath(input_path: str = None, output_path: str = None):
             "y": round(offset_y, 4)
         },
         "work_area": {
-            "width": round(bounds.get('width', 0), 4),
-            "height": round(bounds.get('height', 0), 4)
+            "width": round(board_h if orientation in ['rot90', 'rot270'] else board_w, 4),
+            "height": round(board_w if orientation in ['rot90', 'rot270'] else board_h, 4)
         },
         "statistics": {
             "total_commands": len(commands),

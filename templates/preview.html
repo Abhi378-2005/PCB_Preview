@@ -1267,6 +1267,15 @@
           </select>
         </div>
 
+        <div style="margin-bottom:10px;">
+          <label style="font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;">Board Orientation</label>
+          <select class="step-select" id="gcode-orientation" style="width:100%;margin-top:4px;" onchange="applyPreviewOrientation()">
+            <option value="normal">Normal</option>
+            <option value="rot90">&#x21BB; Rotate 90&deg; CCW</option>
+            <option value="rot180">&#x21BA; Rotate 180&deg;</option>
+            <option value="rot270">&#x21BA; Rotate 270&deg; CCW</option>
+          </select>
+        </div>
         <button class="btn-generate" id="btn-generate"
           onclick="convertGCode()"
           {% if not files %}disabled title="Upload Gerber files first"{% endif %}>
@@ -1380,12 +1389,13 @@
                       width:100%; aspect-ratio: {{ board.width_mm }} / {{ board.height_mm }};
                       background: {{ board_bg }}; border-radius: 3px;"></div>
 
+          <div id="trace-layers" style="position:absolute; width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden;">
           {% for file in files %}
           <img class="layer-img" data-file="{{ file }}" src="/render/{{ file }}" alt="{{ file }}" onload="onLayerLoad()"
             onerror="onLayerError(this)">
           {% endfor %}
 
-          <!-- Dimension annotations overlaid on the board -->
+          <!-- Dimension annotations move with the trace orientation -->
           {% if board %}
           <div class="dim-container" id="dim-container">
             <div class="dim-wrapper" id="dim-wrapper">
@@ -1396,6 +1406,8 @@
             </div>
           </div>
           {% endif %}
+          </div>
+
           {% else %}
           <div class="empty-state">
             <div class="icon">📋</div>
@@ -1728,6 +1740,47 @@
       const mode = document.getElementById('gcode-mode').value;
       const rasterOpts = document.getElementById('raster-options');
       rasterOpts.style.display = mode === 'raster' ? 'block' : 'none';
+      applyPreviewOrientation();
+    }
+
+    function applyPreviewOrientation() {
+      const orientation = document.getElementById('gcode-orientation').value;
+
+      // Map orientation values to CSS transforms
+      const transformMap = {
+        'normal': 'none',
+        'rot90':  'rotate(-90deg)',
+        'rot180': 'rotate(180deg)',
+        'rot270': 'rotate(90deg)',
+      };
+
+      const cssTransform = transformMap[orientation] || 'none';
+
+      // Apply ONLY to the trace layers (not the green board background)
+      const traceContainer = document.getElementById('trace-layers');
+      if (traceContainer) {
+        traceContainer.style.transform = cssTransform;
+        traceContainer.style.transformOrigin = 'center center';
+        traceContainer.style.transition = 'transform 0.3s ease';
+      }
+
+      // Reset G-code state because orientation changed
+      toolpathData = null;
+      currentCmdIndex = 0;
+      headX = 0;
+      headY = 0;
+      clearTrail();
+
+      // Continuously update the laser pointer to stick to the visual bottom-left 
+      // of the board bounding box during the 300ms CSS rotation animation.
+      const startTime = performance.now();
+      function updatePointer(time) {
+        moveHead(0, 0);
+        if (time - startTime < 350) { // slightly over 300ms to catch the end
+          requestAnimationFrame(updatePointer);
+        }
+      }
+      requestAnimationFrame(updatePointer);
     }
 
     async function clearAll() {
@@ -1762,6 +1815,7 @@
         const mode = document.getElementById('gcode-mode').value;
         const lineSpacing = document.getElementById('gcode-line-spacing').value;
         const laserDiameter = document.getElementById('gcode-laser-diameter').value;
+        const orientation = document.getElementById('gcode-orientation').value;
         // Collect active (visible) layer filenames
         const activeLayers = Array.from(document.querySelectorAll('.layer-item.active'))
           .map(el => el.getAttribute('data-file'))
@@ -1770,7 +1824,7 @@
           throw new Error('No layers selected. Toggle at least one layer on.');
         }
         const layersParam = encodeURIComponent(activeLayers.join(','));
-        const response = await fetch(`/convert-gcode?scale=${scale}&mode=${mode}&line_spacing=${lineSpacing}&laser_diameter=${laserDiameter}&layers=${layersParam}`, { method: 'POST' });
+        const response = await fetch(`/convert-gcode?scale=${scale}&mode=${mode}&line_spacing=${lineSpacing}&laser_diameter=${laserDiameter}&layers=${layersParam}&orientation=${orientation}`, { method: 'POST' });
 
         if (!response.ok) {
           const err = await response.json();
@@ -1967,11 +2021,17 @@
       const ir = getImageRect();
       if (!ir) return { x: 0, y: 0 };
 
+      // Determine if physical dimensions are swapped
+      const orientation = document.getElementById('gcode-orientation').value;
+      const isSwapped = orientation === 'rot90' || orientation === 'rot270';
+      const current_board_w = isSwapped ? MAP.board_h : MAP.board_w;
+      const current_board_h = isSwapped ? MAP.board_w : MAP.board_h;
+
       // Bed position → fraction of board
-      // X: 0 = left edge, board_w = right edge
-      // Y: 0 = bottom edge, board_h = top edge
-      const fracX = bx / MAP.board_w;
-      const fracY = 1.0 - (by / MAP.board_h);  // Y inverted: 0=bottom → fraction 1.0
+      // X: 0 = left edge, current_board_w = right edge
+      // Y: 0 = bottom edge, current_board_h = top edge
+      const fracX = bx / current_board_w;
+      const fracY = 1.0 - (by / current_board_h);  // Y inverted: 0=bottom → fraction 1.0
 
       // Fraction → pixel position on the actual rendered image
       return {

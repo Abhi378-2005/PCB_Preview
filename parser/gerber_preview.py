@@ -387,7 +387,8 @@ async def clear_gerbers():
 @app.post("/convert-gcode")
 async def convert_gcode(scale: int = 1, layers: str = "",
                         mode: str = "trace", line_spacing: float = 0.1,
-                        laser_diameter: float = 0.2):
+                        laser_diameter: float = 0.2,
+                        orientation: str = "normal"):
     """
     Run the full pipeline on selected layer files.
 
@@ -401,6 +402,7 @@ async def convert_gcode(scale: int = 1, layers: str = "",
       ?mode=trace|raster   (toolpath generation mode)
       ?line_spacing=0.1    (raster scan line spacing in mm)
       ?laser_diameter=0.2  (physical laser spot size in mm)
+      ?orientation=normal|mirror_x|rot90|rot180  (board orientation)
     """
     # Clamp scale to allowed values
     if scale not in (1, 2, 3, 5, 10):
@@ -409,6 +411,10 @@ async def convert_gcode(scale: int = 1, layers: str = "",
     # Validate mode
     if mode not in ("trace", "raster"):
         mode = "trace"
+
+    # Validate orientation
+    if orientation not in ("normal", "rot90", "rot180", "rot270"):
+        orientation = "normal"
 
     # Clamp line spacing and laser diameter
     line_spacing = max(0.05, min(2.0, line_spacing))
@@ -504,17 +510,19 @@ async def convert_gcode(scale: int = 1, layers: str = "",
             json_mod.dump(merged, f, indent=2)
 
         print(f"[convert] Merged {len(valid_files)} layers: {total_parsed_tracks} tracks, {total_parsed_pads} pads")
-        print(f"[convert] Mode: {mode}")
+        print(f"[convert] Mode: {mode}, Orientation: {orientation}")
 
-        # Step 2: Generate toolpath (mode-dependent)
+        # Step 2: Generate toolpath (mode-dependent), passing orientation
         if mode == "raster":
             toolpath = generate_raster_toolpath(
                 merged_parsed_path, toolpath_path,
                 line_spacing=line_spacing,
-                laser_diameter=laser_diameter
+                laser_diameter=laser_diameter,
+                orientation=orientation
             )
         else:
-            toolpath = generate_toolpath(merged_parsed_path, toolpath_path)
+            toolpath = generate_toolpath(merged_parsed_path, toolpath_path,
+                                         orientation=orientation)
 
         # Step 3: Generate G-code (with scale)
         generate_gcode(toolpath_path, gcode_path, scale=scale)
