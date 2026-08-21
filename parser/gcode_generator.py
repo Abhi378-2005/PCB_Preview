@@ -109,7 +109,7 @@ def generate_gcode(input_path: str = None, output_path: str = None,
     # Initialization
     gcode.append("G21          ; Units: millimeters")
     gcode.append("G90          ; Absolute positioning")
-    gcode.append("G28          ; Home all axes")
+    gcode.append("G92 X0 Y0    ; Set current position as origin")
     gcode.append("M5           ; Ensure laser is OFF")
     gcode.append(f"G0 F{rapid_speed}   ; Set rapid travel speed")
     gcode.append(f"G1 F{burn_speed}    ; Set burn/engrave speed")
