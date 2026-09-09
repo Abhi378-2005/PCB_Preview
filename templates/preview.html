@@ -1854,12 +1854,12 @@
           <label style="font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;">Mode</label>
           <select class="step-select" id="gcode-mode" style="width:100%;margin-top:4px;"
             onchange="toggleRasterOptions()">
-            <option value="trace">🔧 Vector Trace — trace copper paths</option>
-            <option value="raster">▓ Raster Etch — etch around copper</option>
+            <option value="raster" selected>▓ Raster Etch (Negative) — Burns background, leaves copper</option>
+            <option value="trace">🔧 Vector Trace (Positive) — Burns copper traces directly</option>
           </select>
         </div>
 
-        <div id="raster-options" style="display:none;margin-bottom:10px;">
+        <div id="raster-options" style="display:block;margin-bottom:10px;">
           <label style="font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;">Line
             Spacing</label>
           <select class="step-select" id="gcode-line-spacing" style="width:100%;margin-top:4px;">
@@ -2144,6 +2144,10 @@
               <button class="esp-dpad-btn" disabled onclick="machineJog('y', 0)" title="Y-">▼</button>
               <div></div>
             </div>
+            
+            <button class="step-select" id="btn-unlock" disabled onclick="machineUnlock()" style="width:100%;margin-top:10px;background:var(--bg-secondary);color:#ffaa00;font-weight:bold;border:1px solid var(--border);">⚠️ Unlock ($X) ⚠️</button>
+
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;margin-top:16px;letter-spacing:0.1em;">STEP SIZE (mm)</div>
             
             <select class="step-select" id="esp-step" style="margin-top:8px; width:120px;">
               <option value="16">1 step (0.0125mm)</option>
@@ -3113,6 +3117,7 @@
 
     function enableMachineControls() {
       document.querySelectorAll('.esp-dpad-btn').forEach(b => b.disabled = false);
+      document.getElementById('btn-unlock').disabled = false;
       document.getElementById('esp-laser-pwr').disabled = false;
       document.getElementById('btn-fire').disabled = false;
       document.getElementById('btn-stream').disabled = false;
@@ -3121,6 +3126,7 @@
 
     function disableMachineControls() {
       document.querySelectorAll('.esp-dpad-btn').forEach(b => b.disabled = true);
+      document.getElementById('btn-unlock').disabled = true;
       document.getElementById('esp-laser-pwr').disabled = true;
       document.getElementById('btn-fire').disabled = true;
       document.getElementById('btn-stream').disabled = true;
@@ -3233,6 +3239,21 @@
       }
     }
 
+    async function machineUnlock() {
+      if (!usbConnected) return;
+      try {
+        const res = await fetch('/api/serial/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: "$X" })
+        });
+        const data = await res.json();
+        console.log('Unlock response:', data.response);
+      } catch (e) {
+        console.error('Unlock failed:', e);
+      }
+    }
+
     async function machineHome() {
       if (connMode === 'usb') {
         await fetch('/api/serial/send', {
@@ -3276,6 +3297,11 @@
     async function machineStreamGCode() {
       if (connMode === 'usb') {
         if (!usbConnected || isStreaming) return;
+        
+        if (!confirm("⚠️ Check Laser Position ⚠️\n\nIs the laser positioned at the BOTTOM-LEFT corner of your physical copper board?\n\nThe engraving will use the current position as the origin (0,0) and move right/up from here. If you are too close to the limit switch, the machine will crash!")) {
+          return;
+        }
+        
         isStreaming = true;
 
         // Reset preview state for a fresh run
@@ -3313,6 +3339,8 @@
         const coordRe = /X([-\d.]+)/i;
         const coordReY = /Y([-\d.]+)/i;
         let laserOn = false;  // track M3/M5 state for trail color
+        let lastGcodeX = 0;
+        let lastGcodeY = 0;
 
         _streamEventSource.onmessage = (event) => {
           let data;
@@ -3340,9 +3368,11 @@
             if (mX || mY) {
               const isDrawMove = /^G1\b/i.test(line) && laserOn;
               const isRapid   = /^G0\b/i.test(line);
-              const gx = mX ? parseFloat(mX[1]) : headX;  // keep current if axis not in line
-              const gy = mY ? parseFloat(mY[1]) : headY;
-              const bed = gcodeToBed(gx, gy);
+              
+              if (mX) lastGcodeX = parseFloat(mX[1]);
+              if (mY) lastGcodeY = parseFloat(mY[1]);
+              
+              const bed = gcodeToBed(lastGcodeX, lastGcodeY);
               moveHead(bed.x, bed.y, isDrawMove);
             }
 
@@ -3378,6 +3408,7 @@
       setMode('jog');
       document.getElementById('btn-stream').disabled = false;
       document.getElementById('btn-estop').classList.remove('visible');
+      document.getElementById('btn-unlock').disabled = false;
       document.getElementById('stream-status').textContent = aborted
         ? '⏹ Stream aborted'
         : '✅ Stream complete';
@@ -3557,10 +3588,29 @@
       document.getElementById('stream-bar-fill').style.width = '0%';
 
       // Stream line by line
+      const coordRe = /X([-\d.]+)/i;
+      const coordReY = /Y([-\d.]+)/i;
+      let laserOn = false;
+      let lastGcodeX = 0;
+      let lastGcodeY = 0;
+
       for (let i = 0; i < lines.length; i++) {
         if (streamAbort) break;
 
         const line = lines[i];
+        
+        // Track pointer visually
+        if (/^M3\b/i.test(line)) laserOn = true;
+        if (/^M5\b/i.test(line)) laserOn = false;
+        const mX = coordRe.exec(line);
+        const mY = coordReY.exec(line);
+        if (mX || mY) {
+          const isDrawMove = /^G1\b/i.test(line) && laserOn;
+          if (mX) lastGcodeX = parseFloat(mX[1]);
+          if (mY) lastGcodeY = parseFloat(mY[1]);
+          const bed = gcodeToBed(lastGcodeX, lastGcodeY);
+          moveHead(bed.x, bed.y, isDrawMove);
+        }
         let sent = false;
         let retries = 0;
         const MAX_RETRIES = 200;  // ~10 seconds max wait per line

@@ -35,7 +35,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # ── Default Configuration ─────────────────────────────────────────
 DEFAULT_LINE_SPACING = 0.1    # mm between scan lines
-DEFAULT_MARGIN = 1.0          # mm extra etch area around board bounds
+DEFAULT_MARGIN = 0.0          # mm extra etch area around board bounds
 DEFAULT_SAFETY_GAP = 0.15    # mm extra clearance around copper features
 DEFAULT_LASER_DIAMETER = 0.2 # mm physical laser spot size
 
