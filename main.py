@@ -11,13 +11,10 @@ LOG_CONFIG = {
     "disable_existing_loggers": False,
     "formatters": {
         "default": {
-            "()": "logging.Formatter",
-            "fmt": "%(levelprefix)s %(message)s",
-            "use_colors": False,
+            "format": "%(levelname)s:     %(message)s",
         },
         "access": {
-            "()": "logging.Formatter",
-            "fmt": '%(asctime)s - %(client_addr)s - "%(request_line)s" %(status_code)s',
+            "format": "%(asctime)s - %(levelname)s - %(message)s",
         },
     },
     "handlers": {
